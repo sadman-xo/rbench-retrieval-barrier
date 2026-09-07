@@ -1,0 +1,12 @@
+# Phase 1 — RAG testbed (CPU-only, portable)
+# Pinned loosely; tighten once the smoke test passes.
+sentence-transformers>=2.7,<4      # embedders + CrossEncoder reranker (pulls torch, transformers)
+rank-bm25>=0.2.2                    # sparse retrieval for the hybrid path
+numpy>=1.26
+# faiss-cpu is optional: the dense index falls back to numpy brute-force if it is missing.
+# On Windows, `pip install faiss-cpu` usually works; if it fails, the fallback keeps Phase 1 running.
+faiss-cpu>=1.8 ; platform_system != "Darwin" or platform_machine != "arm64"
+
+# --- added in later phases (not needed for the Phase 1 smoke test) ---
+# beir>=2.0            # BEIR datasets (SciFact / NFCorpus / FiQA)
+# datasets>=2.19

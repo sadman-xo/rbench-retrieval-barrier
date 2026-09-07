@@ -1,0 +1,23 @@
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# --- model / data caches (never commit; re-downloaded on the runtime) ---
+.cache/
+*.faiss
+
+# --- experiment outputs: keep the folder, ignore bulky run files ---
+results/*
+!results/.gitkeep
+
+# --- pre-existing project scratch ---
+papers/
+report/
+.md/
+.pytest_cache/
+agent_c/__pycache__
+demo/__pycache__
+tests/__pycache__
