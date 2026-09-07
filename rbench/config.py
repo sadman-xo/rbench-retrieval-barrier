@@ -32,6 +32,15 @@ class RetrievalConfig:
     reranker_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     bm25_weight: float = 0.5       # fusion weight for sparse scores (dense weight = 1 - this)
 
+    # --- provenance-weighted defense (Phase 3) ---
+    provenance_defense: bool = False       # penalize low-trust docs in the final ranking
+    # trust in [0,1] per provenance class; 1 = fully trusted, 0 = untrusted
+    trust_weights: dict = field(default_factory=lambda: {
+        "internal": 1.0, "unknown": 0.5, "external": 0.0})
+    # penalty strength beta: a zero-trust doc loses beta * (score spread) from its rank score,
+    # scaled to each pipeline's own score range so one beta works across dense/hybrid/rerank
+    provenance_penalty: float = 0.5
+
     # --- runtime ---
     device: str = "cpu"
     normalize_embeddings: bool = True   # cosine similarity via dot product on unit vectors

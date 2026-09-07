@@ -16,7 +16,12 @@ Course project — Sadman Bin Tareq (2105040), Rageeb Hasan Shafee (2105175).
       Reports Retrieval Success Rate (RSR@k) for none/naive/cem variants across
       dense-only vs hybrid+rerank, plus honest recall@k as a corpus-health check.
       Run: `python -m rbench.attack.run_attack --dataset scifact --device auto`
-- [ ] Phase 3 — provenance-weighted retrieval defense.
+- [x] **Phase 3 — provenance-weighted defense**: penalizes low-trust (external)
+      docs in the final ranking. Evaluated honestly — a fraction of the honest
+      corpus is legitimately external — sweeping penalty strength beta to show the
+      security (RSR down) vs. utility (honest recall down) trade-off against the
+      static attacker.
+      Run: `python -m rbench.defense.run_defense --dataset scifact --device auto`
 - [ ] Phase 4 — defense-aware adaptive attacker (T2, query-distribution level). ← the contribution.
 - [ ] Phase 5 — evaluation, transferability, writeup.
 

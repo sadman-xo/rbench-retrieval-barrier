@@ -152,29 +152,46 @@ class RetrievalPipeline:
             self._reranker = CrossEncoder(self.cfg.reranker_name, device=self.cfg.device)
         return self._reranker
 
+    def _apply_defense(self, cand: np.ndarray, scores: np.ndarray, docs) -> np.ndarray:
+        """Provenance-weighted penalty on candidate scores (Phase 3 defense).
+
+        A doc of trust t loses provenance_penalty * (1 - t) * (score spread) from its
+        rank score. Scaling by the candidate score spread makes one penalty constant
+        behave sensibly whether scores are cosines, fused [0,1], or reranker logits.
+        Returns adjusted scores aligned with `cand`. No-op if the defense is off.
+        """
+        if not self.cfg.provenance_defense or len(cand) == 0:
+            return scores
+        spread = float(scores.max() - scores.min()) or 1.0
+        tw = self.cfg.trust_weights
+        penalty = np.array(
+            [self.cfg.provenance_penalty * (1.0 - tw.get(docs[i].provenance, 0.0)) * spread
+             for i in cand], dtype=np.float32)
+        return scores - penalty
+
     def _rank_view(self, query_id, query_text, emb, ids, docs, tokens) -> RetrievalResult:
         q_vec = self.embedder.encode_one(query_text)
         dense = emb @ q_vec
+
         if not self.cfg.hybrid:
-            order = np.argsort(-dense)[: self.cfg.top_k]
-            return RetrievalResult(query_id, [ids[i] for i in order],
-                                   [float(dense[i]) for i in order])
+            cand = np.arange(len(ids))
+            scores = dense.astype(np.float32)
+        else:
+            from rank_bm25 import BM25Okapi
 
-        from rank_bm25 import BM25Okapi
+            bm = np.asarray(BM25Okapi(tokens).get_scores(query_text.lower().split()), dtype=np.float32)
+            fused = (1 - self.cfg.bm25_weight) * _minmax(dense) + self.cfg.bm25_weight * _minmax(bm)
+            cand = np.argsort(-fused)[: self.cfg.candidate_k]
+            if not self.cfg.rerank:
+                scores = fused[cand].astype(np.float32)
+            else:
+                pairs = [(query_text, docs[i].text) for i in cand]
+                scores = np.asarray(self._get_reranker().predict(pairs), dtype=np.float32)
 
-        bm = np.asarray(BM25Okapi(tokens).get_scores(query_text.lower().split()), dtype=np.float32)
-        fused = (1 - self.cfg.bm25_weight) * _minmax(dense) + self.cfg.bm25_weight * _minmax(bm)
-        pool = np.argsort(-fused)[: self.cfg.candidate_k]
-        if not self.cfg.rerank:
-            top = pool[: self.cfg.top_k]
-            return RetrievalResult(query_id, [ids[i] for i in top], [float(fused[i]) for i in top])
-
-        pairs = [(query_text, docs[i].text) for i in pool]
-        ce = np.asarray(self._get_reranker().predict(pairs), dtype=np.float32)
-        order = pool[np.argsort(-ce)][: self.cfg.top_k]
-        ce_by_pool = {int(p): float(s) for p, s in zip(pool, ce)}
-        return RetrievalResult(query_id, [ids[i] for i in order],
-                               [ce_by_pool[int(i)] for i in order])
+        adj = self._apply_defense(cand, scores, docs)
+        order = np.argsort(-adj)[: self.cfg.top_k]
+        sel = cand[order]
+        return RetrievalResult(query_id, [ids[i] for i in sel], [float(adj[o]) for o in order])
 
     def search_base(self, query_id: str, query_text: str) -> RetrievalResult:
         """Honest retrieval over the base corpus only (no poison)."""
