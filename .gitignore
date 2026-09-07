@@ -8,6 +8,7 @@ venv/
 # --- model / data caches (never commit; re-downloaded on the runtime) ---
 .cache/
 *.faiss
+data/beir/          # downloaded BEIR datasets
 
 # --- experiment outputs: keep the folder, ignore bulky run files ---
 results/*

@@ -58,6 +58,12 @@ class RetrievalPipeline:
         self._emb: np.ndarray | None = None       # (n, dim) doc embeddings
         self._faiss = None
         self._bm25 = None
+        self._reranker = None
+        # --- cached "base" corpus for incremental poison insertion (attack phases) ---
+        self._base_docs: list[Doc] = []
+        self._base_ids: list[str] = []
+        self._base_emb: np.ndarray | None = None
+        self._base_tokens: list[list[str]] | None = None
 
     # ---- indexing -------------------------------------------------------
     def index(self, docs: list[Doc]) -> "RetrievalPipeline":
@@ -125,3 +131,61 @@ class RetrievalPipeline:
         ce_by_pool = {int(p): float(s) for p, s in zip(pool, ce)}
         return RetrievalResult(query_id, [self._ids[i] for i in rerank_order],
                                [ce_by_pool[int(i)] for i in rerank_order])
+
+    # ---- incremental base + poison (attack phases) ----------------------
+    # Embed the honest corpus ONCE, then evaluate many poison documents by only
+    # embedding the single poison doc and stacking it on. Essential for large
+    # (BEIR-scale) corpora, where re-indexing thousands of docs per trial is
+    # prohibitive. Uses numpy for dense scores (exact; identical to FAISS IP).
+    def index_base(self, docs: list[Doc]) -> "RetrievalPipeline":
+        self._base_docs = list(docs)
+        self._base_ids = [d.doc_id for d in self._base_docs]
+        self._base_emb = self.embedder.encode([d.text for d in self._base_docs])
+        self._base_tokens = ([d.text.lower().split() for d in self._base_docs]
+                             if self.cfg.hybrid else None)
+        return self
+
+    def _get_reranker(self):
+        if self._reranker is None:
+            from sentence_transformers import CrossEncoder
+
+            self._reranker = CrossEncoder(self.cfg.reranker_name, device=self.cfg.device)
+        return self._reranker
+
+    def _rank_view(self, query_id, query_text, emb, ids, docs, tokens) -> RetrievalResult:
+        q_vec = self.embedder.encode_one(query_text)
+        dense = emb @ q_vec
+        if not self.cfg.hybrid:
+            order = np.argsort(-dense)[: self.cfg.top_k]
+            return RetrievalResult(query_id, [ids[i] for i in order],
+                                   [float(dense[i]) for i in order])
+
+        from rank_bm25 import BM25Okapi
+
+        bm = np.asarray(BM25Okapi(tokens).get_scores(query_text.lower().split()), dtype=np.float32)
+        fused = (1 - self.cfg.bm25_weight) * _minmax(dense) + self.cfg.bm25_weight * _minmax(bm)
+        pool = np.argsort(-fused)[: self.cfg.candidate_k]
+        if not self.cfg.rerank:
+            top = pool[: self.cfg.top_k]
+            return RetrievalResult(query_id, [ids[i] for i in top], [float(fused[i]) for i in top])
+
+        pairs = [(query_text, docs[i].text) for i in pool]
+        ce = np.asarray(self._get_reranker().predict(pairs), dtype=np.float32)
+        order = pool[np.argsort(-ce)][: self.cfg.top_k]
+        ce_by_pool = {int(p): float(s) for p, s in zip(pool, ce)}
+        return RetrievalResult(query_id, [ids[i] for i in order],
+                               [ce_by_pool[int(i)] for i in order])
+
+    def search_base(self, query_id: str, query_text: str) -> RetrievalResult:
+        """Honest retrieval over the base corpus only (no poison)."""
+        return self._rank_view(query_id, query_text, self._base_emb,
+                               self._base_ids, self._base_docs, self._base_tokens)
+
+    def search_with_extra(self, query_id: str, query_text: str, extra: Doc) -> RetrievalResult:
+        """Retrieval over base corpus + one extra (poison) doc, reusing cached base embeddings."""
+        extra_emb = self.embedder.encode_one(extra.text)[None, :]
+        emb = np.vstack([self._base_emb, extra_emb])
+        ids = self._base_ids + [extra.doc_id]
+        docs = self._base_docs + [extra]
+        tokens = (self._base_tokens + [extra.text.lower().split()]) if self.cfg.hybrid else None
+        return self._rank_view(query_id, query_text, emb, ids, docs, tokens)

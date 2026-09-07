@@ -7,6 +7,6 @@ numpy>=1.26
 # On Windows, `pip install faiss-cpu` usually works; if it fails, the fallback keeps Phase 1 running.
 faiss-cpu>=1.8 ; platform_system != "Darwin" or platform_machine != "arm64"
 
-# --- added in later phases (not needed for the Phase 1 smoke test) ---
-# beir>=2.0            # BEIR datasets (SciFact / NFCorpus / FiQA)
-# datasets>=2.19
+# --- real datasets (Phase 2 on BEIR: SciFact / NFCorpus / FiQA) ---
+# BEIR is fetched directly from the official zip host via stdlib (see
+# rbench/retriever/beir_loader.py) — no dataset library needed.

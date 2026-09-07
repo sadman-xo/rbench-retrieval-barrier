@@ -11,9 +11,11 @@ Course project — Sadman Bin Tareq (2105040), Rageeb Hasan Shafee (2105175).
 - [x] **Phase 1 — RAG testbed**: corpus + embedder + retrieval pipeline
       (dense-only, or full hybrid dense+BM25+reranker behind a flag) + smoke test.
 - [x] **Phase 2 — CEM trigger attack**: black-box Cross-Entropy Method trigger
-      optimizer + attack runner. Reports Retrieval Success Rate (RSR@k) for
-      none/naive/cem variants across dense-only vs hybrid+rerank.
-      Run: `python -m rbench.attack.run_attack --device auto`
+      optimizer + attack runner, on the toy corpus **or real BEIR datasets**
+      (SciFact/NFCorpus/FiQA, fetched directly from the official BEIR host).
+      Reports Retrieval Success Rate (RSR@k) for none/naive/cem variants across
+      dense-only vs hybrid+rerank, plus honest recall@k as a corpus-health check.
+      Run: `python -m rbench.attack.run_attack --dataset scifact --device auto`
 - [ ] Phase 3 — provenance-weighted retrieval defense.
 - [ ] Phase 4 — defense-aware adaptive attacker (T2, query-distribution level). ← the contribution.
 - [ ] Phase 5 — evaluation, transferability, writeup.
