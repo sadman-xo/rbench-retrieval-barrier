@@ -8,9 +8,12 @@ Course project — Sadman Bin Tareq (2105040), Rageeb Hasan Shafee (2105175).
 
 ## Status
 
-- [x] **Phase 1 — RAG testbed** (this stage): corpus + embedder + retrieval pipeline
+- [x] **Phase 1 — RAG testbed**: corpus + embedder + retrieval pipeline
       (dense-only, or full hybrid dense+BM25+reranker behind a flag) + smoke test.
-- [ ] Phase 2 — reproduce the CEM trigger attack.
+- [x] **Phase 2 — CEM trigger attack**: black-box Cross-Entropy Method trigger
+      optimizer + attack runner. Reports Retrieval Success Rate (RSR@k) for
+      none/naive/cem variants across dense-only vs hybrid+rerank.
+      Run: `python -m rbench.attack.run_attack --device auto`
 - [ ] Phase 3 — provenance-weighted retrieval defense.
 - [ ] Phase 4 — defense-aware adaptive attacker (T2, query-distribution level). ← the contribution.
 - [ ] Phase 5 — evaluation, transferability, writeup.
