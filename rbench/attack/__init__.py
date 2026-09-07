@@ -1,3 +1,3 @@
-from .cem import CEMConfig, CEMResult, optimize
+from .cem import CEMConfig, CEMResult, optimize, optimize_tokens
 
-__all__ = ["CEMConfig", "CEMResult", "optimize"]
+__all__ = ["CEMConfig", "CEMResult", "optimize", "optimize_tokens"]

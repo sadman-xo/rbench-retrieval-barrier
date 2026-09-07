@@ -38,7 +38,7 @@ import numpy as np
 from ..config import RESULTS_DIR, RetrievalConfig, resolve_device
 from ..retriever import Doc, Embedder, RetrievalPipeline, load_toy
 from ..retriever.beir_loader import load_beir
-from .cem import CEMConfig, optimize
+from .cem import CEMConfig, optimize_tokens
 
 # Inert placeholder — represents where the malicious instruction would sit. Kept
 # non-actionable on purpose (defensive research on synthetic/benchmark data).
@@ -97,10 +97,9 @@ def main() -> None:
         docs, queries = load_beir(args.dataset, max_docs=args.max_docs, max_queries=args.max_queries)
 
     base_docs = [d for d in docs if not d.is_poison]   # honest corpus only
-    vocab = build_vocab(base_docs, queries)
     print(f"dataset={args.dataset} device={device} k={args.k} | "
-          f"corpus={len(base_docs)} docs | queries={len(queries)} | vocab={len(vocab)}")
-    print(f"CEM: trigger_len={args.trigger_len} n_iters={args.iters} n_samples={args.samples}\n")
+          f"corpus={len(base_docs)} docs | queries={len(queries)}")
+    print(f"CEM (token-level): trigger_len={args.trigger_len} n_iters={args.iters} n_samples={args.samples}\n")
 
     embedder = Embedder(RetrievalConfig().embedder_name, device=device, normalize=True)
 
@@ -132,7 +131,7 @@ def main() -> None:
             embs = embedder.encode([f"{t}. {PAYLOAD}" for t in cands])
             return embs @ target
 
-        cem_res = optimize(vocab, score_fn, cem_cfg)
+        cem_res = optimize_tokens(embedder.tokenizer, score_fn, cem_cfg, device=device)
         triggers[q.query_id] = cem_res.best_trigger
         poison_texts = {
             "none": PAYLOAD,
@@ -161,7 +160,7 @@ def main() -> None:
     out = {
         "config": {"dataset": args.dataset, "device": device, "k": args.k,
                    "corpus_size": len(base_docs), "n_queries": len(queries),
-                   "cem": asdict(cem_cfg), "vocab_size": len(vocab),
+                   "cem": asdict(cem_cfg), "search_space": "token-level",
                    "honest_recall_at_k": honest_recall},
         "triggers": triggers,
         "rsr": {p: {v: rsr(results[p][v]) for v in variants} for p in pipes},

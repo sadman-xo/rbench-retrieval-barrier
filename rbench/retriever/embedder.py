@@ -27,6 +27,15 @@ class Embedder:
     def dim(self) -> int:
         return int(self.model.get_sentence_embedding_dimension())
 
+    @property
+    def tokenizer(self):
+        """The underlying HF tokenizer (for token-level CEM). Falls back across the
+        SentenceTransformer API variants that expose it differently."""
+        tok = getattr(self.model, "tokenizer", None)
+        if tok is not None:
+            return tok
+        return self.model._first_module().tokenizer
+
     def encode(self, texts: list[str], batch_size: int = 32) -> np.ndarray:
         """Return an (n, dim) float32 array. Rows are unit vectors if normalize=True."""
         vecs = self.model.encode(

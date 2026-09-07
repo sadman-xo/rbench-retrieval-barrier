@@ -10,8 +10,10 @@ Course project — Sadman Bin Tareq (2105040), Rageeb Hasan Shafee (2105175).
 
 - [x] **Phase 1 — RAG testbed**: corpus + embedder + retrieval pipeline
       (dense-only, or full hybrid dense+BM25+reranker behind a flag) + smoke test.
-- [x] **Phase 2 — CEM trigger attack**: black-box Cross-Entropy Method trigger
-      optimizer + attack runner, on the toy corpus **or real BEIR datasets**
+- [x] **Phase 2 — CEM trigger attack**: black-box, **token-level** Cross-Entropy
+      Method trigger optimizer (faithful to the authors' USENIX'26 method: samples
+      raw token IDs from the embedder's tokenizer; independently implemented) +
+      attack runner, on the toy corpus **or real BEIR datasets**
       (SciFact/NFCorpus/FiQA, fetched directly from the official BEIR host).
       Reports Retrieval Success Rate (RSR@k) for none/naive/cem variants across
       dense-only vs hybrid+rerank, plus honest recall@k as a corpus-health check.

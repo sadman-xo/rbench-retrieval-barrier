@@ -27,8 +27,8 @@ import numpy as np
 from ..config import RESULTS_DIR, RetrievalConfig, resolve_device
 from ..retriever import Embedder, RetrievalPipeline, load_toy
 from ..retriever.beir_loader import load_beir
-from ..attack.cem import CEMConfig, optimize
-from ..attack.run_attack import PAYLOAD, POISON_ID, build_vocab, make_poison
+from ..attack.cem import CEMConfig, optimize_tokens
+from ..attack.run_attack import PAYLOAD, POISON_ID, make_poison
 from .provenance import assign_provenance
 
 BETAS = (0.0, 0.25, 0.5, 0.75, 1.0)
@@ -74,11 +74,10 @@ def main() -> None:
 
     base = assign_provenance([d for d in docs if not d.is_poison], external_frac=args.external_frac)
     n_ext = sum(1 for d in base if d.provenance == "external")
-    vocab = build_vocab(base, queries)
     pipeline_name = "hybrid+rerank" if args.hybrid else "dense-only"
     print(f"dataset={args.dataset} device={device} k={args.k} pipeline={pipeline_name}")
     print(f"corpus={len(base)} docs ({n_ext} external / {len(base)-n_ext} internal) | "
-          f"queries={len(queries)} | vocab={len(vocab)}\n")
+          f"queries={len(queries)}\n")
 
     embedder = Embedder(RetrievalConfig().embedder_name, device=device, normalize=True)
     cfg = RetrievalConfig(hybrid=args.hybrid, rerank=args.hybrid, top_k=args.k, device=device)
@@ -94,7 +93,7 @@ def main() -> None:
         def score_fn(cands):
             return embedder.encode([f"{t}. {PAYLOAD}" for t in cands]) @ target
 
-        best = optimize(vocab, score_fn, cem_cfg).best_trigger
+        best = optimize_tokens(embedder.tokenizer, score_fn, cem_cfg, device=device).best_trigger
         cem_texts[q.query_id] = f"{best}. {PAYLOAD}"
         naive_texts[q.query_id] = f"{q.text} {PAYLOAD}"
 
