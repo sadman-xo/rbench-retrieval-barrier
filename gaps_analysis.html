@@ -1,0 +1,846 @@
+<title>Retrieval Barrier Gap Audit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+  :root {
+    --ground:      #eef0f3;
+    --surface:     #ffffff;
+    --surface-sub: #f5f6f8;
+    --ink:         #15181e;
+    --ink-soft:    #454c59;
+    --ink-mute:    #6d7688;
+    --rule:        #d6dae1;
+    --rule-soft:   #e4e7ec;
+    --accent:      #2f5480;
+    --accent-soft: #e6ecf5;
+
+    --closed:      #a03f2c;
+    --closed-bg:   #f7e7e3;
+    --narrow:      #8a6209;
+    --narrow-bg:   #f8eed6;
+    --open:        #1a6553;
+    --open-bg:     #dff0ea;
+
+    --shadow: 0 1px 2px rgba(21,24,30,.05), 0 6px 18px -12px rgba(21,24,30,.28);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0e1116;
+      --surface:     #161a21;
+      --surface-sub: #1c212a;
+      --ink:         #e4e7ec;
+      --ink-soft:    #b3bac6;
+      --ink-mute:    #838d9d;
+      --rule:        #2b323d;
+      --rule-soft:   #232932;
+      --accent:      #86aede;
+      --accent-soft: #1c2836;
+
+      --closed:      #e2907c;
+      --closed-bg:   #2e1d19;
+      --narrow:      #dcb058;
+      --narrow-bg:   #2c2415;
+      --open:        #6dc0a6;
+      --open-bg:     #14291f;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 22px -14px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #0e1116;
+    --surface:     #161a21;
+    --surface-sub: #1c212a;
+    --ink:         #e4e7ec;
+    --ink-soft:    #b3bac6;
+    --ink-mute:    #838d9d;
+    --rule:        #2b323d;
+    --rule-soft:   #232932;
+    --accent:      #86aede;
+    --accent-soft: #1c2836;
+
+    --closed:      #e2907c;
+    --closed-bg:   #2e1d19;
+    --narrow:      #dcb058;
+    --narrow-bg:   #2c2415;
+    --open:        #6dc0a6;
+    --open-bg:     #14291f;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 22px -14px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 0 24px 100px;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 22px;
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin: 0 0 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+  h1 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(2.05rem, 5vw, 3rem);
+    line-height: 1.1;
+    letter-spacing: -.02em;
+    text-wrap: balance;
+    margin: 0 0 16px;
+  }
+  .standfirst {
+    font-size: 1.06rem;
+    color: var(--ink-soft);
+    max-width: 64ch;
+    margin: 0;
+  }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+  .meta {
+    margin-top: 26px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 14px 26px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  .meta dt {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 3px;
+  }
+  .meta dd { margin: 0; }
+  .meta a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+  /* ---------- sections ---------- */
+  section { margin-bottom: 56px; }
+  h2 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-weight: 600;
+    font-size: 1.55rem;
+    letter-spacing: -.012em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  .sec-note {
+    color: var(--ink-mute);
+    font-size: 14.5px;
+    margin: 0 0 24px;
+    max-width: 68ch;
+  }
+  h3 {
+    font-family: "IBM Plex Serif", Georgia, serif;
+    font-weight: 600;
+    font-size: 1.12rem;
+    margin: 0 0 8px;
+  }
+  p { max-width: 68ch; }
+
+  /* ---------- scoreboard ---------- */
+  .tally {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .tally-item {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    padding: 9px 15px;
+    border-radius: 3px;
+    border: 1px solid;
+    font-size: 13px;
+  }
+  .tally-item b {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .t-closed { color: var(--closed); background: var(--closed-bg); border-color: color-mix(in srgb, var(--closed) 30%, transparent); }
+  .t-narrow { color: var(--narrow); background: var(--narrow-bg); border-color: color-mix(in srgb, var(--narrow) 30%, transparent); }
+  .t-open   { color: var(--open);   background: var(--open-bg);   border-color: color-mix(in srgb, var(--open) 30%, transparent); }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .cell {
+    background: var(--surface);
+    padding: 14px 15px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .cell-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    color: var(--ink-mute);
+  }
+  .cell-name {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--ink);
+  }
+  .chip {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .c-closed { color: var(--closed); background: var(--closed-bg); }
+  .c-narrow { color: var(--narrow); background: var(--narrow-bg); }
+  .c-open   { color: var(--open);   background: var(--open-bg); }
+
+  /* ---------- callout ---------- */
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 3px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+  }
+  .callout p { margin: 0 0 12px; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout ul { margin: 0; padding-left: 20px; }
+  .callout li { margin-bottom: 9px; max-width: 66ch; }
+  .callout li:last-child { margin-bottom: 0; }
+
+  /* ---------- dossier ---------- */
+  .dossier { display: flex; flex-direction: column; gap: 18px; }
+  .case {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .case-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--rule-soft);
+    background: var(--surface-sub);
+  }
+  .case-num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-mute);
+    padding-top: 2px;
+    flex-shrink: 0;
+  }
+  .case-title { flex: 1; min-width: 0; }
+  .case-title h3 { margin: 0 0 2px; }
+  .case-slide {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: .04em;
+  }
+  .case-body { padding: 18px 20px 20px; }
+  .row { margin-bottom: 16px; }
+  .row:last-child { margin-bottom: 0; }
+  .row-label {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 6px;
+  }
+  .row p { margin: 0; font-size: 15px; }
+  .row.verdict p { color: var(--ink); }
+  .ev {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .ev li {
+    display: grid;
+    grid-template-columns: 108px 1fr;
+    gap: 4px 14px;
+    font-size: 14.5px;
+    color: var(--ink-soft);
+    padding-left: 12px;
+    border-left: 2px solid var(--rule-soft);
+  }
+  .ev .src {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    color: var(--ink-mute);
+    padding-top: 3px;
+    line-height: 1.45;
+  }
+  .ev a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  .ev strong { color: var(--ink); font-weight: 600; }
+  .self {
+    background: var(--accent-soft);
+    border-left-color: var(--accent) !important;
+    margin-left: -12px;
+    padding: 8px 12px 8px 12px;
+    border-radius: 0 3px 3px 0;
+  }
+
+  /* ---------- recommendation ---------- */
+  .recs { display: flex; flex-direction: column; gap: 16px; counter-reset: rec; }
+  .rec {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+  }
+  .rec-rank {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 7px;
+  }
+  .rec h3 { margin-bottom: 10px; }
+  .rec p { margin: 0 0 10px; font-size: 15px; }
+  .rec p:last-child { margin-bottom: 0; }
+  .rec .why {
+    font-size: 14px;
+    color: var(--ink-soft);
+    border-top: 1px solid var(--rule-soft);
+    padding-top: 11px;
+    margin-top: 13px;
+  }
+  .rec .why b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- fixes table ---------- */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; background: var(--surface); font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 15px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 600;
+    background: var(--surface-sub);
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-mute); white-space: nowrap; }
+
+  /* ---------- sources ---------- */
+  .sources {
+    columns: 2;
+    column-gap: 34px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .sources li { break-inside: avoid; margin-bottom: 9px; line-height: 1.5; }
+  .sources a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  .sources .yr { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-mute); }
+
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  @media (max-width: 620px) {
+    .ev li { grid-template-columns: 1fr; }
+    .ev .src { padding-top: 0; }
+    .sources { columns: 1; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow"><span>Gap audit</span><span>·</span><span>arXiv 2601.07072</span><span>·</span><span>3 September 2026</span></p>
+    <h1>Which of your nine gaps are actually still open</h1>
+    <p class="standfirst">Your deck closes with nine research gaps in <em>Overcoming the Retrieval Barrier</em>. Checked against the paper's own text and eight months of follow-up literature: <strong>four are already answered, three have been narrowed to a sliver, and two survive</strong> — but not in the form the slides state them.</p>
+    <dl class="meta">
+      <div><dt>Deck audited</dt><dd>Indirect-promt-1-22.pdf — 22 slides of a planned 26</dd></div>
+      <div><dt>Source paper</dt><dd>Chang, Bao, Luo &amp; Yu, <a href="https://arxiv.org/abs/2601.07072">arXiv:2601.07072</a>, 11 Jan 2026</dd></div>
+      <div><dt>Evidence base</dt><dd>38 papers · 16 that cite the source paper · 1 field incident report</dd></div>
+    </dl>
+  </header>
+
+  <section>
+    <h2>The scoreboard</h2>
+    <p class="sec-note">Verdicts map one-to-one onto the numbered list on your slide 18. <em>Answered</em> means the claim is contradicted by published work — in two cases by the source paper itself.</p>
+
+    <div class="tally">
+      <span class="tally-item t-closed"><b>4</b> answered — cut or rewrite</span>
+      <span class="tally-item t-narrow"><b>3</b> narrowed — keep, but re-scope</span>
+      <span class="tally-item t-open"><b>2</b> survive — defensible today</span>
+    </div>
+
+    <div class="board">
+      <div class="cell"><div class="cell-top"><span class="num">GAP 1</span><span class="chip c-narrow">Narrowed</span></div><span class="cell-name">Hybrid retrieval &amp; reranking robustness</span></div>
+      <div class="cell"><div class="cell-top"><span class="num">GAP 2</span><span class="chip c-narrow">Narrowed</span></div><span class="cell-name">Cross-model trigger transferability</span></div>
+      <div class="cell"><div class="cell-top"><span class="num">GAP 3</span><span class="chip c-narrow">Narrowed</span></div><span class="cell-name">Limited agentic environments</span></div>
+      <div class="cell"><div class="cell-top"><span class="num">GAP 4</span><span class="chip c-closed">Answered</span></div><span class="cell-name">Weak retrieval-level defenses</span></div>
+      <div class="cell"><div class="cell-top"><span class="num">GAP 5</span><span class="chip c-closed">Answered</span></div><span class="cell-name">Limited multimodal manipulation</span></div>
+      <div class="cell"><div class="cell-top"><span class="num">GAP 6</span><span class="chip c-closed">Answered</span></div><span class="cell-name">Positional dependency of triggers</span></div>
+      <div class="cell"><div class="cell-top"><span class="num">GAP 7</span><span class="chip c-open">Survives</span></div><span class="cell-name">Query-specific trigger optimization</span></div>
+      <div class="cell"><div class="cell-top"><span class="num">GAP 8</span><span class="chip c-closed">Answered</span></div><span class="cell-name">Email-specific IPI security</span></div>
+      <div class="cell"><div class="cell-top"><span class="num">GAP 9</span><span class="chip c-open">Survives</span></div><span class="cell-name">Provenance-aware retrieval</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Read this before you present</h2>
+    <p class="sec-note">Three problems are about where the list came from, not about the literature. They will get caught in a viva faster than any missing citation.</p>
+    <div class="callout">
+      <ul>
+        <li><strong>Gaps 1, 2 and 3 are the paper's own Limitations section.</strong> Section 8 says verbatim that the attack "is not evaluated against hybrid pipelines and reranking mechanisms" and that it "does not ensure transferability when the reference and target embedding models have different model architectures — we acknowledge these gaps." Section 5.2 says "we focus on the email scenario … and leave the other settings as future directions." Presenting these as gaps <em>you</em> identified is a claim the paper contradicts on its own page 13. Attribute them.</li>
+        <li><strong>Gaps 5 and 6 are contradicted by the paper you are presenting.</strong> Appendix C runs the attack on MS COCO image-to-text retrieval with OpenCLIP ViT-B-32 and reports near-perfect recall. Section 4.2 and Figure 6 test triggers moved across positions, Figure 7 scatters trigger tokens through the document, and Section 6 states "our attack is position-agnostic (recall Figure 6), position-based defenses are excluded by design." Both slides claim gaps the authors already filled.</li>
+        <li><strong>Gap 8 contradicts your own Gap 3.</strong> Slide 21 says the evaluation focuses too narrowly on email; slide 18 then lists email security as an unexplored gap. Email is the <em>one</em> setting the paper covers in depth — Enron corpus, AutoGen single-agent, Magentic-One multi-agent, four attack objectives. Pick one position.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Gap-by-gap evidence</h2>
+    <p class="sec-note">Each entry lists what has already been published against the claim, then what genuinely survives. Highlighted rows are evidence from inside the source paper itself.</p>
+
+    <div class="dossier">
+
+      <!-- GAP 1 -->
+      <article class="case">
+        <div class="case-head">
+          <span class="case-num">01</span>
+          <div class="case-title">
+            <h3>Hybrid retrieval and reranking robustness</h3>
+            <span class="case-slide">Slides 18, 19 · verdict: narrowed</span>
+          </div>
+          <span class="chip c-narrow">Narrowed</span>
+        </div>
+        <div class="case-body">
+          <div class="row">
+            <div class="row-label">As stated</div>
+            <p>"Does the attack work against hybrid retrieval? Can BM25 reduce attack success? Can cross-encoder rerankers detect malicious candidates?"</p>
+          </div>
+          <div class="row">
+            <div class="row-label">Already answered</div>
+            <ul class="ev">
+              <li class="self"><span class="src">2601.07072 §8</span><span>The paper names this limitation itself and footnotes Weaviate's hybrid search docs. Not your finding.</span></li>
+              <li><span class="src">2603.18034<br>Mar 2026</span><span><strong>Semantic Chameleon</strong> answers all three questions on a 67,941-document Security Stack Exchange corpus: hybrid BM25 + vector retrieval cuts gradient-guided poisoning from 38% to <strong>0%</strong> across 50 attacks; attackers who jointly optimize sparse and dense signals recover only 20–44%.</span></li>
+              <li><span class="src">2606.11265<br>Jun 2026</span><span><strong>CRCP</strong> shows existing poisoning "substantially degrades after reranking despite achieving high retrieval-stage relevance," blames retrieval granularity mismatch under chunking, and builds a chunk-aware, rerank-consistent attack.</span></li>
+              <li><span class="src">2603.22934<br>Mar 2026</span><span><strong>ProGRank</strong> is a training-free retriever-side reranking defense evaluated end-to-end and under adaptive evasive attacks.</span></li>
+              <li><span class="src">2602.06616<br>Feb 2026</span><span><strong>Confundo</strong> fine-tunes an LLM as a poison generator specifically because "content is often processed before use, which can fragment the poison."</span></li>
+              <li><span class="src">2605.01591 · 2601.20283 · 2512.23307</span><span>The adversarial-IR line has attacked cross-encoders and LLM listwise rerankers (CRAFT; single-word attacks at up to 91% success on BERT/monoT5) and built certified defenses (RobustMask).</span></li>
+            </ul>
+          </div>
+          <div class="row verdict">
+            <div class="row-label">What survives</div>
+            <p>A narrow but real sliver. Semantic Chameleon uses white-box GCG at the retrieval stage only; CRCP targets knowledge poisoning, not instruction injection through an agent. <strong>Nobody has run a black-box, query-natural, hybrid- and rerank-aware trigger optimization end-to-end through a tool-using agent.</strong> That is the claim you can defend — not "hybrid retrieval is unstudied."</p>
+          </div>
+        </div>
+      </article>
+
+      <!-- GAP 2 -->
+      <article class="case">
+        <div class="case-head">
+          <span class="case-num">02</span>
+          <div class="case-title">
+            <h3>Cross-model trigger transferability</h3>
+            <span class="case-slide">Slides 18, 20 · verdict: narrowed, premise partly dissolved</span>
+          </div>
+          <span class="chip c-narrow">Narrowed</span>
+        </div>
+        <div class="case-body">
+          <div class="row">
+            <div class="row-label">As stated</div>
+            <p>"A realistic attacker may not know the target embedding model." Proposed direction: a model-agnostic transferable trigger — one trigger, many models.</p>
+          </div>
+          <div class="row">
+            <div class="row-label">Already answered</div>
+            <ul class="ev">
+              <li class="self"><span class="src">2601.07072 §4.2, §8</span><span>Figure 5 already measures cross-model transfer. OpenAI-built triggers average 74% recall and break 7 of 8 targets above 60%; Qwen-family triggers transfer within the family; Q3-0.6B → OpenAI drops to 10%. The Limitations section flags the architecture-mismatch case.</span></li>
+              <li><span class="src">2602.00364<br>30 Jan 2026</span><span><strong>"Someone Hid It!"</strong> — posted nineteen days after the paper you are presenting — generates <em>transferable injection tokens from zero-shot surrogate LLMs with no victim queries and no victim model knowledge</em>. That is your slide-20 research direction, already published.</span></li>
+              <li><span class="src">2607.01276<br>Jul 2026</span><span><strong>Embedding Inference Attack</strong> undercuts the premise: observing only the unordered retrieved set, an adversary can <em>identify which embedding model is deployed</em> from a candidate list — and some queries stay discriminative even behind a reranker. If you can fingerprint the model, you do not need a universal trigger.</span></li>
+              <li><span class="src">2310.19156 · 2412.20953</span><span>Zhong et al. (EMNLP 2023) established within-family transfer and out-of-domain generalization; GASLITE (ACM CCS 2025) benchmarked nine models and stated it did not optimize for transferability.</span></li>
+              <li><span class="src">2511.19257<br>Nov 2025</span><span><strong>Medusa</strong> demonstrates the standard recipe — surrogate model ensemble plus invariant risk minimization — for black-box cross-modal transfer.</span></li>
+            </ul>
+          </div>
+          <div class="row verdict">
+            <div class="row-label">What survives</div>
+            <p>Cross-<em>architecture</em> transfer for black-box CEM triggers specifically is still weak, and no one has chained fingerprinting to targeted trigger construction. Reframe from "build a universal trigger" to <strong>"fingerprint, then target"</strong> — that is novel and it is the operationally realistic path.</p>
+          </div>
+        </div>
+      </article>
+
+      <!-- GAP 3 -->
+      <article class="case">
+        <div class="case-head">
+          <span class="case-num">03</span>
+          <div class="case-title">
+            <h3>Limited agentic environments</h3>
+            <span class="case-slide">Slides 18, 21 · verdict: narrowed</span>
+          </div>
+          <span class="chip c-narrow">Narrowed</span>
+        </div>
+        <div class="case-body">
+          <div class="row">
+            <div class="row-label">As stated</div>
+            <p>Coding assistants, software engineering agents, enterprise agents, cloud infrastructure agents, log analysis agents and database agents "remain insufficiently explored."</p>
+          </div>
+          <div class="row">
+            <div class="row-label">Already answered</div>
+            <ul class="ev">
+              <li><span class="src">2605.17986<br>May 2026</span><span><strong>LivePI</strong> covers seven input surfaces — email, chat, web, local files, <em>repositories</em>, wallet — on a real VM, including unsafe code retrieval and execution, across GPT-5.3-Codex, Claude Opus 4.6, Gemini 3.1 Pro, Kimi K2.5 and GLM-5. Attack success 10.7–29.6%.</span></li>
+              <li><span class="src">2605.24659<br>May 2026</span><span><strong>IterInject</strong> runs extension experiments on <em>Claude Code</em>, a production coding agent.</span></li>
+              <li><span class="src">2607.10490<br>Jul 2026</span><span><strong>NetInjectBench</strong> — 130 scenarios over tickets, alerts, <em>logs</em>, runbooks and ChatOps. Naive execution hits an 82.5% unsafe tool-action rate; a metadata-aware policy gate reaches 0/240.</span></li>
+              <li><span class="src">2605.24245<br>May 2026</span><span>Deep-research agents (STORM, Co-STORM, OmniThink) poisoned via user-generated content — and this one <em>does</em> model retrieval competition, exploiting repeated retrieval of the same Reddit/Wikipedia pages across a query cluster. Closest existing work to a non-email retrieval-barrier attack.</span></li>
+              <li><span class="src">CSA, 2026</span><span>Field evidence: <strong>GrafanaGhost</strong> poisoned log entries so Grafana's AI assistant exfiltrated data via markdown image rendering — a log-analysis agent compromised in the wild. Google reports a 32% relative rise in malicious IPI content between Nov 2025 and Feb 2026.</span></li>
+              <li><span class="src">2604.03870 · 2605.17830</span><span>Six defenses × four IPI vectors × nine backbones in multi-step tool environments; and longitudinal memory contamination in memory-equipped agents.</span></li>
+            </ul>
+          </div>
+          <div class="row verdict">
+            <div class="row-label">What survives</div>
+            <p>The environments are covered — but almost all of that work <em>hands</em> the payload to the agent. None of it makes the malicious document win a retrieval competition against a realistic code, log or schema corpus. Re-scope to <strong>"the retrieval barrier has only been crossed in email and web corpora"</strong> and the gap holds.</p>
+          </div>
+        </div>
+      </article>
+
+      <!-- GAP 4 -->
+      <article class="case">
+        <div class="case-head">
+          <span class="case-num">04</span>
+          <div class="case-title">
+            <h3>Weak retrieval-level defenses</h3>
+            <span class="case-slide">Slides 18, 22 — including "Most Important Gap" · verdict: answered as written</span>
+          </div>
+          <span class="chip c-closed">Answered</span>
+        </div>
+        <div class="case-body">
+          <div class="row">
+            <div class="row-label">As stated</div>
+            <p>"There is still no strong and general-purpose retrieval-aware defense against indirect prompt injection." Slide 18 flags this as the most important gap of the nine.</p>
+          </div>
+          <div class="row">
+            <div class="row-label">Already answered</div>
+            <ul class="ev">
+              <li class="self"><span class="src">2601.07072 §6</span><span>The paper tests only three lightweight defenses and explicitly rules fine-tuning defenses (SecAlign, DataSentinel, StruQ) out of scope. "We tested three and they failed" is not evidence that no strong defense exists.</span></li>
+              <li><span class="src">2405.15556</span><span><strong>RobustRAG</strong> gives <em>certifiable</em> robustness — formal lower bounds on response quality against an adaptive attacker with full knowledge of the defense. This alone falsifies the slide as worded.</span></li>
+              <li><span class="src">2509.23519<br>Sep 2025</span><span><strong>ReliabilityRAG</strong> — provably robust, maximum-independent-set filtering over a document graph, explicitly built for RAG-based web search.</span></li>
+              <li><span class="src">2608.13010<br>Aug 2026</span><span><strong>RAGSieve</strong> reaches 95.2% AUROC and drops attack success from 67.4% to 14.0%, beating the GMTP and CleanBase baselines. Note the baselines — this is a crowded field, not an empty one.</span></li>
+              <li><span class="src">2512.24268 · 2602.04711 · 2510.09710</span><span>RAGPart &amp; RAGMask (retrieval-stage, four retrievers, four attacks), SDAG (block-sparse document attention), SeCon-RAG (two-stage semantic filtering).</span></li>
+              <li><span class="src">2605.01782 · 2606.25721</span><span>Forensics has arrived too: character-level poison traceback (Needle-in-RAG) and token-influence attribution (TRACE).</span></li>
+            </ul>
+          </div>
+          <div class="row verdict">
+            <div class="row-label">What survives — and this is the good version</div>
+            <p>The April 2026 survey that <em>cites your paper</em> gives you a far stronger framing, with two named structural mismatches: a <strong>signal mismatch</strong> (attacks now produce fluent, retrievable payloads while defenses still hunt poison as a semantic anomaly) and a <strong>stage mismatch</strong> (defensive effort concentrates downstream while the persistent harm is created upstream at the corpus layer, which "remains underdeveloped"). Its sharpest line: <em>"few defenses are evaluated against attackers aware of the defense,"</em> making reported robustness <em>"systematically optimistic."</em> Rewrite slide 22 around adaptive evaluation, not absence.</p>
+          </div>
+        </div>
+      </article>
+
+      <!-- GAP 5 -->
+      <article class="case">
+        <div class="case-head">
+          <span class="case-num">05</span>
+          <div class="case-title">
+            <h3>Limited multimodal manipulation</h3>
+            <span class="case-slide">Slide 18 · verdict: answered, and factually wrong about the paper</span>
+          </div>
+          <span class="chip c-closed">Answered</span>
+        </div>
+        <div class="case-body">
+          <div class="row">
+            <div class="row-label">Already answered</div>
+            <ul class="ev">
+              <li class="self"><span class="src">2601.07072<br>Appendix C</span><span><strong>The paper has a multimodal section.</strong> "Generalization to multi-modal retrieval" runs image-to-text retrieval on MS COCO against a 25,000-caption pool with OpenCLIP ViT-B-32, and Table 5 reports near-perfect Recall@1/5/10 "even with very short trigger fragment." Presenting this as an unexplored gap is the single most checkable error in the deck.</span></li>
+              <li><span class="src">2503.06254<br>Mar 2025</span><span><strong>Poisoned-MRAG</strong> — up to 98% attack success from five injected image-text pairs on InfoSeek, with dirty-label and clean-label cross-modal strategies.</span></li>
+              <li><span class="src">2502.17832<br>Feb 2025</span><span><strong>MM-PoisonRAG</strong> — localized and globalized poisoning; a single adversarial item disrupts reasoning across all queries.</span></li>
+              <li><span class="src">2511.15435 · 2511.19257</span><span>HV-Attack perturbs only the user's image input; Medusa does black-box cross-modal transfer on medical multimodal RAG.</span></li>
+            </ul>
+          </div>
+          <div class="row verdict">
+            <div class="row-label">What survives</div>
+            <p>Very little. The paper's multimodal case keeps the <em>corpus</em> textual — poisoning an image corpus so an image wins retrieval for a text query under the retrieval-barrier framing is not done there, but Poisoned-MRAG and HV-Attack already occupy most of that ground. Cut the slide.</p>
+          </div>
+        </div>
+      </article>
+
+      <!-- GAP 6 -->
+      <article class="case">
+        <div class="case-head">
+          <span class="case-num">06</span>
+          <div class="case-title">
+            <h3>Positional dependency of triggers</h3>
+            <span class="case-slide">Slide 18 · verdict: answered, contradicted by the paper</span>
+          </div>
+          <span class="chip c-closed">Answered</span>
+        </div>
+        <div class="case-body">
+          <div class="row">
+            <div class="row-label">Already answered</div>
+            <ul class="ev">
+              <li class="self"><span class="src">2601.07072 §4.2<br>Figure 6</span><span>"Across positions" is a named subsection. A prefix optimized at position 0 keeps over 50% Recall@5 when moved elsewhere for most models. OpenAI is the exception — 80% collapses to nearly 0% at position 20 — but re-optimizing at the end recovers 60%.</span></li>
+              <li class="self"><span class="src">2601.07072<br>Figure 7</span><span>Token dispersion goes further: scatter the trigger tokens randomly through the document and GTE and Q3-4B stay above 90% Recall@5. OpenAI falls to 6%.</span></li>
+              <li class="self"><span class="src">2601.07072 §6</span><span>And the conclusion is stated outright: "because our attack is position-agnostic (recall Figure 6), position-based defenses are excluded by design."</span></li>
+              <li><span class="src">2312.14197<br>KDD 2025</span><span><strong>BIPIA</strong> already injects malicious instructions at the beginning, middle and end of external content to measure positional bias.</span></li>
+            </ul>
+          </div>
+          <div class="row verdict">
+            <div class="row-label">What survives — a small, genuinely interesting one</div>
+            <p>Nobody explains <em>why</em> OpenAI's embeddings are the outlier. The paper only conjectures that they "encode positional information more explicitly." <strong>Whether deliberately position-sensitive embeddings are a viable architectural defense is unstudied</strong> — and that is a defense contribution, not a gap in attack coverage. It is worth one slide, reframed.</p>
+          </div>
+        </div>
+      </article>
+
+      <!-- GAP 7 -->
+      <article class="case">
+        <div class="case-head">
+          <span class="case-num">07</span>
+          <div class="case-title">
+            <h3>Query-specific trigger optimization</h3>
+            <span class="case-slide">Slide 18 · verdict: survives, but only one half of it</span>
+          </div>
+          <span class="chip c-open">Survives</span>
+        </div>
+        <div class="case-body">
+          <div class="row">
+            <div class="row-label">The premise is correct</div>
+            <p>The attack is per-query: "on each target query, we generate a single malicious item and inject it into the corpus," at roughly $0.21 per target query on OpenAI embeddings.</p>
+          </div>
+          <div class="row">
+            <div class="row-label">Already answered — the attack half</div>
+            <ul class="ev">
+              <li class="self"><span class="src">2601.07072<br>Figure 8</span><span>The paper already shows one trigger generalizes across different attack fragments, lifting similarity from about −0.1 to 0.76. Only the query axis stays fixed.</span></li>
+              <li><span class="src">2310.19156<br>EMNLP 2023</span><span>Query-agnostic corpus poisoning is three years old: 50 passages optimized on Natural Questions mislead <strong>over 94%</strong> of questions in financial documents and online forums.</span></li>
+              <li><span class="src">2412.20953<br>CCS 2025</span><span>GASLITE targets concept-level query distributions and states that single-query SEO is "completely solved."</span></li>
+              <li><span class="src">2602.00364 · 2602.06616 · 2606.01212</span><span>Query-agnostic black-box attacks; Confundo handles users not issuing the anticipated query; DiscourseFlip manipulates opinion across a multi-topic query network.</span></li>
+            </ul>
+          </div>
+          <div class="row verdict">
+            <div class="row-label">What survives — the defense half</div>
+            <p>The survey's taxonomy splits targets into T1 (a single known query) and T2 (claim manipulation across a query distribution). T1 dominates the literature. For T2 it finds attacks are "few," <strong>defenses are "nearly absent," and no benchmark evaluates it at all</strong> — it calls this a structural blind spot. So the gap is real, but it is not "build a query-agnostic attack." It is <strong>build the T2 benchmark and the first T2 defense.</strong></p>
+          </div>
+        </div>
+      </article>
+
+      <!-- GAP 8 -->
+      <article class="case">
+        <div class="case-head">
+          <span class="case-num">08</span>
+          <div class="case-title">
+            <h3>Email-specific IPI security</h3>
+            <span class="case-slide">Slide 18 · verdict: answered — the weakest of the nine</span>
+          </div>
+          <span class="chip c-closed">Answered</span>
+        </div>
+        <div class="case-body">
+          <div class="row">
+            <div class="row-label">Already answered</div>
+            <ul class="ev">
+              <li class="self"><span class="src">2601.07072 §5.2</span><span>Email is the paper's <em>deepest</em> evaluation: Enron corpus, ten FAQ queries, AutoGen single-agent with four MCP tools, Magentic-One multi-agent, and four objectives — answer manipulation, phishing worm propagation, tool misuse, code execution.</span></li>
+              <li><span class="src">CVE-2025-32711<br>2509.10540</span><span><strong>EchoLeak</strong> — CVSS 9.3, zero-click exfiltration from Microsoft 365 Copilot via a single email retrieved into RAG context, bypassing XPIA filters, link redaction and CSP. Analysed in its own arXiv paper. Email IPI is not under-examined; it is the canonical case.</span></li>
+              <li><span class="src">2607.03821<br>Jul 2026</span><span><strong>DualView</strong> defends personal agents against <em>stored</em> IPI — untrusted data written out and read back — with email as a primary channel.</span></li>
+              <li><span class="src">Vendor</span><span>Microsoft Defender for Office 365 ships inbox prompt-injection defenses; Nylas publishes an email prompt-injection defense guide. Mitigations exist in production.</span></li>
+            </ul>
+          </div>
+          <div class="row verdict">
+            <div class="row-label">What survives</div>
+            <p>Nothing as written, and it directly contradicts your Gap 3. Delete it, or fold the one defensible piece into Gap 4: <strong>the shipped email mitigations have never been evaluated against a retrieval-stage adaptive attacker.</strong></p>
+          </div>
+        </div>
+      </article>
+
+      <!-- GAP 9 -->
+      <article class="case">
+        <div class="case-head">
+          <span class="case-num">09</span>
+          <div class="case-title">
+            <h3>Lack of provenance-aware retrieval</h3>
+            <span class="case-slide">Slide 18 · verdict: survives — your strongest</span>
+          </div>
+          <span class="chip c-open">Survives</span>
+        </div>
+        <div class="case-body">
+          <div class="row">
+            <div class="row-label">What exists already</div>
+            <ul class="ev">
+              <li><span class="src">2510.20768<br>Oct 2025</span><span><strong>RAGRank</strong> applies PageRank-style source credibility to a corpus and demonstrates lower authority scores for malicious documents on MS MARCO and CTI feeds — but the authors call it heuristic and leave certification to future work.</span></li>
+              <li><span class="src">2606.26449<br>Jun 2026</span><span><strong>ProvenAI</strong> separates citation fidelity from per-document influence and surfaces a "citation-influence gap": a clean citation audit can coexist with seven <em>uncited</em> sources demonstrably shifting the output.</span></li>
+              <li><span class="src">2510.09710<br>OWASP</span><span>SeCon-RAG filters semantically; the OWASP RAG Security Cheat Sheet prescribes ingestion hashing, restricted vector-DB writes and connector sanitization — practice guidance, not a validated defense.</span></li>
+            </ul>
+          </div>
+          <div class="row verdict">
+            <div class="row-label">Why it holds</div>
+            <p>Everything above is heuristic, uncertified, or a checklist. The survey's own <strong>stage mismatch</strong> says exactly this: harm is created upstream at the corpus layer while that defense layer "remains underdeveloped." Provenance is the one item on your slide 18 where the literature agrees with you. It should be the headline gap, not ninth on the list.</p>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Three contributions that would actually survive review</h2>
+    <p class="sec-note">Built only from what is left standing above. Ranked by how defensible the novelty claim is today.</p>
+    <div class="recs">
+
+      <div class="rec">
+        <div class="rec-rank">Strongest claim</div>
+        <h3>The retrieval barrier under a production pipeline</h3>
+        <p>Take the paper's black-box CEM trigger and push it through what real systems deploy: BM25 + dense hybrid fusion, document chunking, and a cross-encoder or LLM reranker — then measure end-to-end through a tool-using agent, not at Recall@5.</p>
+        <p class="why"><b>Why it survives:</b> Semantic Chameleon answered the hybrid question with white-box GCG at the retrieval stage only. CRCP answered the chunk-and-rerank question for knowledge poisoning, not for instruction injection through an agent. The intersection — black-box, natural queries, full pipeline, agent outcome — is unoccupied. You must cite and differentiate from both, or a reviewer will assume you missed them.</p>
+      </div>
+
+      <div class="rec">
+        <div class="rec-rank">Most novel</div>
+        <h3>Fingerprint, then target</h3>
+        <p>Chain embedding-model identification to trigger construction. Use the Embedding Inference Attack to determine which embedding model a deployment runs from black-box retrieval output alone, then optimize a CEM trigger against exactly that model — sidestepping transferability rather than solving it.</p>
+        <p class="why"><b>Why it survives:</b> the fingerprinting paper stops at identification. The retrieval-barrier paper stops at "the adversary likely needs a good guess of the target's embedding architecture." Nobody has joined them, and the join turns a stated limitation into a working attack. It also gives you a clean defense contribution: does query-side noise or reranking break the fingerprint?</p>
+      </div>
+
+      <div class="rec">
+        <div class="rec-rank">Best defense-side paper</div>
+        <h3>Provenance-weighted retrieval, adaptively evaluated</h3>
+        <p>Build a source-authority signal into the retrieval score, then evaluate it against an attacker who knows the defense exists and optimizes against it — including at the T2 query-distribution level, where no benchmark exists yet.</p>
+        <p class="why"><b>Why it survives:</b> it sits on the two things the field admits are missing — an underdeveloped upstream defense layer, and robustness numbers that are "systematically optimistic" because attackers were not defense-aware. Building the T2 evaluation harness is itself a contribution, since none exists.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Deck fixes</h2>
+    <p class="sec-note">Separate from the gap analysis — things to correct before this is presented.</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Where</th><th>Issue</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Slides 23–26</td>
+            <td>The footer counts to 26 but the file ends at 22. Gaps 5–9 are listed on slide 18 and never elaborated — the four missing slides are presumably theirs.</td>
+            <td>Given the verdicts above, do not write four more gap slides. Write one slide for provenance (Gap 9) and one reframing Gap 4 around adaptive evaluation, then a contributions slide.</td>
+          </tr>
+          <tr>
+            <td>Slide 15</td>
+            <td>"Better retrieval quality ≠ better retrieval security" is supported, but the paper's "larger model size offers no protection" line is about the <em>generator</em> LLM (Vicuna-13B vs 7B), not the embedding model.</td>
+            <td>Keep the claim, fix the attribution. The embedding-model evidence is the spread across the eight models in Figure 2, plus Contriever resisting transfer and OpenAI resisting dispersion.</td>
+          </tr>
+          <tr>
+            <td>Slide 12</td>
+            <td>"Main Finding: optimized trigger fragments significantly improve the probability that malicious documents are retrieved" — true but weak for a results slide, and it carries no numbers.</td>
+            <td>Use the headline figures: near-100% retrieval across 11 benchmarks and 8 embedding models, ~$0.21 per target query, over 80% success for credential exfiltration in a multi-agent workflow, and vanilla payloads never retrieved at all.</td>
+          </tr>
+          <tr>
+            <td>Slide 9</td>
+            <td>CEM is presented as the paper's method without noting its origin.</td>
+            <td>The authors themselves write that they "do not wish to take the credit of the originality of this classic algorithm." Saying so pre-empts the obvious question.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Sources</h2>
+    <p class="sec-note">Everything cited above. Dates are first arXiv posting unless a venue is named.</p>
+    <ul class="sources">
+      <li><a href="https://arxiv.org/abs/2601.07072">Overcoming the Retrieval Barrier</a> — Chang, Bao, Luo, Yu <span class="yr">2601.07072 · Jan 2026</span></li>
+      <li><a href="https://arxiv.org/abs/2310.19156">Poisoning Retrieval Corpora by Injecting Adversarial Passages</a> <span class="yr">EMNLP 2023</span></li>
+      <li><a href="https://arxiv.org/abs/2312.14197">BIPIA: Benchmarking and Defending Against IPI</a> <span class="yr">KDD 2025</span></li>
+      <li><a href="https://arxiv.org/abs/2405.15556">Certifiably Robust RAG against Retrieval Corruption</a> <span class="yr">2405.15556</span></li>
+      <li><a href="https://arxiv.org/abs/2412.20953">GASLITEing the Retrieval</a> <span class="yr">ACM CCS 2025</span></li>
+      <li><a href="https://arxiv.org/abs/2502.17832">MM-PoisonRAG</a> <span class="yr">2502.17832</span></li>
+      <li><a href="https://arxiv.org/abs/2503.06254">Poisoned-MRAG</a> <span class="yr">2503.06254</span></li>
+      <li><a href="https://arxiv.org/abs/2505.06579">POISONCRAFT</a> <span class="yr">2505.06579</span></li>
+      <li><a href="https://arxiv.org/abs/2509.10540">EchoLeak: The First Real-World Zero-Click Prompt Injection Exploit</a> <span class="yr">CVE-2025-32711</span></li>
+      <li><a href="https://arxiv.org/abs/2509.23519">ReliabilityRAG</a> <span class="yr">2509.23519</span></li>
+      <li><a href="https://arxiv.org/abs/2510.09710">SeCon-RAG</a> <span class="yr">2510.09710</span></li>
+      <li><a href="https://arxiv.org/abs/2510.20768">RAGRank</a> <span class="yr">2510.20768</span></li>
+      <li><a href="https://arxiv.org/abs/2511.15435">HV-Attack</a> <span class="yr">2511.15435</span></li>
+      <li><a href="https://arxiv.org/abs/2511.19257">Medusa</a> <span class="yr">2511.19257</span></li>
+      <li><a href="https://arxiv.org/abs/2512.23307">RobustMask</a> <span class="yr">2512.23307</span></li>
+      <li><a href="https://arxiv.org/abs/2512.24268">RAGPart &amp; RAGMask</a> <span class="yr">2512.24268</span></li>
+      <li><a href="https://arxiv.org/abs/2601.20283">One Word is Enough</a> <span class="yr">2601.20283</span></li>
+      <li><a href="https://arxiv.org/abs/2602.00364">"Someone Hid It!": Query-Agnostic Black-Box Attacks</a> <span class="yr">2602.00364</span></li>
+      <li><a href="https://arxiv.org/abs/2602.04711">SDAG: Sparse Document Attention RAG</a> <span class="yr">2602.04711</span></li>
+      <li><a href="https://arxiv.org/abs/2602.06616">Confundo</a> <span class="yr">2602.06616</span></li>
+      <li><a href="https://arxiv.org/abs/2603.18034">Semantic Chameleon</a> <span class="yr">2603.18034</span></li>
+      <li><a href="https://arxiv.org/abs/2603.22934">ProGRank</a> <span class="yr">2603.22934</span></li>
+      <li><a href="https://arxiv.org/abs/2604.03870">Your Agent is More Brittle Than You Think</a> <span class="yr">2604.03870</span></li>
+      <li><a href="https://arxiv.org/abs/2604.08304">Securing RAG: A Taxonomy of Attacks, Defenses, and Future Directions</a> <span class="yr">2604.08304</span></li>
+      <li><a href="https://arxiv.org/abs/2605.01591">Led to Mislead / CRAFT</a> <span class="yr">2605.01591</span></li>
+      <li><a href="https://arxiv.org/abs/2605.01782">Needle-in-RAG</a> <span class="yr">2605.01782</span></li>
+      <li><a href="https://arxiv.org/abs/2605.17830">Remembering More, Risking More</a> <span class="yr">2605.17830</span></li>
+      <li><a href="https://arxiv.org/abs/2605.17986">LivePI</a> <span class="yr">2605.17986</span></li>
+      <li><a href="https://arxiv.org/abs/2605.24245">Deep-Research Agents Can Be Poisoned via UGC</a> <span class="yr">2605.24245</span></li>
+      <li><a href="https://arxiv.org/abs/2605.24659">IterInject</a> <span class="yr">2605.24659</span></li>
+      <li><a href="https://arxiv.org/abs/2605.28074">SilentRetrieval</a> <span class="yr">2605.28074</span></li>
+      <li><a href="https://arxiv.org/abs/2606.01212">DiscourseFlip</a> <span class="yr">2606.01212</span></li>
+      <li><a href="https://arxiv.org/abs/2606.11265">When Poison Fails After Retrieval / CRCP</a> <span class="yr">2606.11265</span></li>
+      <li><a href="https://arxiv.org/abs/2606.25721">TRACE: Token Influence Attribution</a> <span class="yr">2606.25721</span></li>
+      <li><a href="https://arxiv.org/abs/2606.26449">ProvenAI</a> <span class="yr">2606.26449</span></li>
+      <li><a href="https://arxiv.org/abs/2607.01276">Embedding Inference Attack</a> <span class="yr">2607.01276</span></li>
+      <li><a href="https://arxiv.org/abs/2607.03821">DualView</a> <span class="yr">2607.03821</span></li>
+      <li><a href="https://arxiv.org/abs/2607.10490">NetInjectBench</a> <span class="yr">2607.10490</span></li>
+      <li><a href="https://arxiv.org/abs/2608.13010">RAGSieve</a> <span class="yr">2608.13010</span></li>
+      <li><a href="https://arxiv.org/abs/2608.24977">Retrieved But Not Reliable (survey)</a> <span class="yr">2608.24977</span></li>
+      <li><a href="https://labs.cloudsecurityalliance.org/research/csa-research-note-indirect-prompt-injection-in-the-wild-2026/">CSA — Indirect Prompt Injection in the Wild</a> <span class="yr">2026</span></li>
+      <li><a href="https://cheatsheetseries.owasp.org/cheatsheets/RAG_Security_Cheat_Sheet.html">OWASP RAG Security Cheat Sheet</a></li>
+    </ul>
+  </section>
+
+</div>
