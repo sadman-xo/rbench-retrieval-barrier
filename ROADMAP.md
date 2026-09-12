@@ -98,6 +98,30 @@ Threat model: black-box (no gradients on the *target*), discrete token space, ea
 
 ---
 
+## Untested attack dimensions (VERIFIED against the full paper, 2026-09-13)
+
+Checked against the actual arXiv:2601.07072 PDF (35pp), not just the deck. Split into
+what the paper already covers (do NOT claim as gaps) vs. what genuinely survives.
+
+**Already tested by the paper — NOT gaps:**
+- Query budget / cost — central to the method (budget `B`, cost `O(log|V|·log 1/ε)`, ~$0.21/query).
+- Trigger fragment length — Figure 2.
+- Cross-model transferability — Figure 5 (on FiQA). Deeper/model-agnostic transfer is future work, but an experiment exists → soften Phase 5 framing.
+- Adaptive attacker vs. their 3 simple defenses — they already break paraphrasing/perplexity/masking. Our Phase 4 novelty must be adaptive-vs-**provenance** at the query-distribution level.
+- Trigger position — position-agnostic (Figure 6); position defenses excluded by design.
+
+**Threat model (verified):** black-box QUERY access to the embedder returning embeddings/scores (cases 1 open-source copy + 2 proprietary API); single injected item; no corpus/param access. Defenses tested = exactly THREE (paraphrasing, perplexity filtering, token masking); NO rerank/hybrid, NO provenance; fine-tuning defenses (SecAlign/DataSentinel/StruQ) scoped out. Retrieval is DENSE-only.
+
+**Confirmed untested — real gaps (ranked):**
+1. **Document chunking at ingestion** — poison is one atomic item; no passage-splitting anywhere. Strongest, most realistic. Feasible in rbench.
+2. **Multiple poison docs / corpus saturation** — explicitly restricted: *"inject only a single malicious item."* Untested by design.
+3. **Payload `Dadv` construction & length + retrieval-vs-obedience tension** — explicitly scoped out (*"do not study the construction process or the downstream effect of Dadv"*). They test trigger length, not payload length.
+4. **Ingestion preprocessing/normalization robustness** (lowercasing, Unicode norm, stopword/punct stripping) — token masking is adjacent but not the same.
+5. **Temporal durability** as the corpus grows.
+6. **Retrieval-outcome-only weak attacker (case 3)** — no score access, only "was it retrieved." Never considered; harder attacker.
+
+**Our confirmed-novel space:** provenance defense (untested), hybrid+rerank robustness (their own Research Gap 1, dense-only in their eval), and adaptive-vs-provenance @ T2.
+
 ## Prior-work anchors
 - Source paper: Chang, Bao, Luo, Yu — *Overcoming the Retrieval Barrier: IPI in the Wild for LLM Systems*, USENIX Security 2026 (arXiv:2601.07072). Attack only, no defense.
 - Two surviving research gaps (from the gap audit): **provenance-aware retrieval** + **query-distribution (T2) defenses vs. adaptive attacker**.
