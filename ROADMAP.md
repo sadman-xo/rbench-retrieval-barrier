@@ -59,11 +59,38 @@ Train a model to predict whether a source is trustworthy, and use that to drive 
 - [ ] Final table: RSR: no defense → static trust → learned trust → learned trust vs. spoofing-aware attacker.
 - [ ] Hits **both surviving research gaps**: provenance-aware retrieval + query-distribution adaptive attacker.
 
+### Phase 7 — Attacker-knowledge track (transferability & unknown embedder)
+Two SEPARATE contributions — do not fuse them. Both attack the paper's "trigger is not
+transferable across architectures" limitation, but from opposite directions:
+one generalizes across models, the other sidesteps the need to know the model at all.
+
+**Phase 7a — Ensemble-surrogate transferability (the direct rebuttal).**
+- Goal: produce ONE trigger that works on an *unseen* embedder without re-optimizing — the real "transferable trigger" the paper says doesn't exist.
+- Method: optimize the trigger against an **ensemble of surrogate embedders** at once; a trigger forced to satisfy many architectures tends to transfer to a held-out one (standard transferable-adversarial-example / GCG recipe).
+- rbench changes:
+  - [ ] `EnsembleEmbedder` wrapper that encodes with N models (e.g. `bge-small`, `gte-small`, `e5-small`).
+  - [ ] CEM `score_fn` = aggregate of **per-model normalized** scores — use `min` (robustness: trigger must satisfy the weakest model) or mean; z-score/rank-normalize per model so different score scales don't let one model dominate.
+  - [ ] `--surrogates A,B,C --target D` split: optimize on {A,B,C}, evaluate RSR on **held-out** D (e.g. `all-MiniLM`) never seen in optimization.
+- Metric: RSR on held-out D — **ensemble-trained trigger vs. single-model-trained trigger** (train-on-A→test-on-D). The gap = the transferability the method buys. Report as a transfer matrix (extends the paper's single-dataset Figure 5 into a *method*, not just a measurement).
+- Claim if it works: "cross-architecture transfer, the paper's stated limitation, is achievable via ensemble-surrogate optimization."
+
+**Phase 7b — Case-3 retrieval-outcome-only attacker (the new threat model).**
+- Goal: attack a target whose embedder you **cannot query at all** — optimize using only the target pipeline's **retrieval outcomes** (rank / retrieved-or-not). This is NOT transfer; it's re-optimizing directly on the unknown target via weak feedback. Genuinely untested (confirmed: the paper requires score access under budget `B`).
+- rbench changes:
+  - [ ] CEM `score_fn` swaps the embedder dot-product for a **rank-based reward** from `pipeline.search` (already returns ranks): e.g. `reward = (k - rank + 1)` if in top-k else 0, or a smoother graded rank signal.
+  - [ ] Handle the **sparse/flat-reward cold start**: warm-start from a Query+ trigger so early candidates already land in top-k and produce a usable gradient of reward; otherwise all candidates score 0 and CEM has no elites to select.
+  - [ ] Log **query budget** (# pipeline queries) vs. RSR to quantify the "cost of blindness."
+- Metric: RSR and query-count for case-3 vs. case-1 (full score access). The delta = what score-access is worth to the attacker.
+- Honest either way: works but is far more query-hungry (shows score access is the real enabler) OR barely works (shows the retrieval-outcome signal is too weak) — both are results.
+- Caveat to state: assumes the attacker can *observe* retrieval outcomes; in reality they often see only the LLM's text answer, which hides retrieval — so this is an upper bound on the case-3 attacker.
+
+**7a vs 7b in one line:** 7a = *one trigger, many models, no re-opt*; 7b = *re-optimize per target, no model knowledge, weak feedback.*
+
 ### Cross-cutting / smaller to-dos
 - [ ] **Sensitivity sweep over `external_frac`** (currently fixed at 0.3) so the recall floor and RSR aren't seen as hand-picked. Reviewer-defense.
 - [ ] **Save result JSONs** for the SciFact Phase 2 & Phase 3 runs into `results/` (currently only toy/mini committed) so every deck number is backed by a file.
 - [ ] **Token-level CEM re-eval on SciFact** — confirm/replace the Phase 2 table numbers with the token-level attacker's numbers.
-- [ ] **Transferability** across embedders (bge-small, gte-small) — do triggers/defense transfer?
+- [ ] **Transferability** across embedders (bge-small, gte-small) — now split into its own **Phase 7a** (ensemble-surrogate → held-out model); also check whether the *defense* transfers.
 - [ ] **Embedding-model fingerprinting** (arXiv:2607.01276) — how the attacker would identify the target's embedder to begin with.
 - [ ] **Writeup** positioning vs. **Semantic Chameleon** (arXiv:2603.18034) and **CRCP** (arXiv:2606.11265) for any hybrid/rerank claim.
 - [ ] **Compile the progress deck** to PDF (Colab `texlive` cell or Overleaf).
