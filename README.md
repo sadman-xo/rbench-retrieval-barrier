@@ -24,12 +24,17 @@ Course project — Sadman Bin Tareq (2105040), Rageeb Hasan Shafee (2105175).
       security (RSR down) vs. utility (honest recall down) trade-off against the
       static attacker.
       Run: `python -m rbench.defense.run_defense --dataset scifact --device auto`
-- [~] **Phase 4 — adaptive attacker**: defense-aware CEM (post-defense
+- [x] **Phase 4 — adaptive attacker**: defense-aware CEM (post-defense
       objective) + T2 query-distribution training with held-out evaluation.
-      Two experiments: per-query (static vs. adaptive head-to-head) and
-      T2 universal trigger (train on distribution, test on unseen queries).
+      SciFact result: **both static and adaptive CEM hit 0% RSR** at beta=0.5.
+      Universal triggers (T2) fail even without defense.
       Run: `python -m rbench.attack.run_adaptive --dataset scifact --device auto`
-- [ ] Phase 5 — evaluation, transferability, writeup.
+- [x] **Phase 4b — stronger-attacker ablation**: greedy coordinate search (GCS)
+      vs. CEM through the defended pipeline. GCS finds higher-scoring triggers
+      (0.74 vs 0.51 avg, 100% vs 73% no-defense RSR) but **both hit 0% RSR**
+      against the defense. The defense is attack-agnostic.
+      Run: `python -m rbench.attack.run_phase4b --dataset scifact --device auto`
+- [ ] Phase 5 — learned trust, transferability, writeup.
 
 ## Setup
 
@@ -71,11 +76,21 @@ rbench/
     corpus.py          # Doc/Query model (Doc.provenance ready for the Phase 3 defense)
     embedder.py        # sentence-transformers wrapper (black-box text->vector)
     pipeline.py        # dense-only | hybrid(dense+bm25) | +reranker
+  attack/
+    cem.py             # Cross-Entropy Method trigger optimizer (Phase 2)
+    gcs.py             # Greedy Coordinate Search optimizer (Phase 4b)
+    adaptive.py        # defense-aware score functions (Phase 4)
+    run_attack.py      # Phase 2 runner
+    run_adaptive.py    # Phase 4 runner (adaptive + T2)
+    run_phase4b.py     # Phase 4b runner (CEM vs GCS ablation)
+  defense/
+    provenance.py      # provenance assignment for honest evaluation
+    run_defense.py     # Phase 3 runner (beta sweep)
   eval/
-    metrics.py         # recall@k, MRR (attack success rate reuses these in Phase 2)
+    metrics.py         # recall@k, MRR
     sanity.py          # Phase 1 smoke test
 data/toy_corpus.json   # synthetic lab corpus (all content fabricated; inert poison doc)
-results/               # experiment outputs (later phases)
+results/               # experiment outputs (JSON per phase)
 ```
 
 ## Ethics / scope

@@ -53,9 +53,9 @@ Train a model to predict whether a source is trustworthy, and use that to drive 
 - [x] **Outcome: defense holds.** Adaptive attacker achieves 0% RSR — same as static. Provenance defense is structurally robust (monotonicity argument confirmed empirically). The attacker's next move is trust-spoofing (Phase 6).
 
 ### Phase 4b — Stronger-attacker ablation (ties in Idea A)
-- [ ] Add **greedy coordinate search** as a second attacker (cheap, black-box, no gradient plumbing — often beats CEM in success at higher query cost).
+- [x] Add **greedy coordinate search** as a second attacker (cheap, black-box, no gradient plumbing — often beats CEM in success at higher query cost).
 - [ ] Optional: **GCG-on-surrogate** (gradients on a downloaded copy of the embedder, transfer to target) — connects to Phase 5 transferability.
-- [ ] Claim to establish: provenance defense is **attack-agnostic** — a better optimizer makes a better trigger, but it's still an external doc, so the defense shouldn't care.
+- [x] **Claim established:** provenance defense is **attack-agnostic**. SciFact results: GCS finds higher-scoring triggers than CEM (0.74 vs 0.51 avg raw score, 100% vs 73% no-defense RSR), uses 12x more queries, but **both hit 0% RSR against the defense**. A better optimizer does not help — the poison is external, and the defense penalizes origin, not content.
 
 ### Phase 5 — Learned trust / data-driven provenance (Idea B, done right)
 - [ ] Trust predictor `t̂(d) ∈ [0,1]` from **source-side, non-forgeable features only** (no content).
