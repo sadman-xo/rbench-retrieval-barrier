@@ -15,7 +15,15 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] **Phase 3 — Defense.** Provenance-weighted retrieval: `score' = score − β·(1−trust)·spread`. SciFact β-sweep (confirmed real): β=0 → RSR 100%/100%; **β=0.5 (sweet spot) → 8% naive / 6% cem**, recall 0.71→0.50; β≥0.75 → 0%. Recall floor ~0.50 is structural (30% of relevant docs are legitimately external).
 - [x] **Progress deck** — `slides/rbench_progress.tex` (Beamer, Phases 1–3). Compile on Colab/Overleaf (no LaTeX locally).
 
-Key finding so far: **source-based (provenance) beats content-based (reranker)** — the reranker only raises the attacker's budget (100→72) and misses the naive attack; provenance collapses naive AND cem together (attack-agnostic).
+- [x] **Phase 4 — Adaptive attacker (the contribution).** Defense-aware CEM + T2 query-distribution training. SciFact results (β=0.5, 35 train / 15 held-out test):
+  - Per-query: no defense → static CEM 73.3% RSR; defense → static 0%, **adaptive 0%**. Knowing the defense gives the attacker zero advantage.
+  - T2 universal trigger: 0% RSR even without defense — a single trigger cannot generalize across queries.
+  - **Theoretical confirmation:** the provenance penalty is monotonic in raw similarity (dense-only), so the adaptive objective is equivalent to the static one. The defense is structurally robust, not security-through-obscurity.
+
+Key findings:
+1. **Source-based (provenance) beats content-based (reranker)** — the reranker only raises the attacker's budget (100→72) and misses the naive attack; provenance collapses naive AND cem together (attack-agnostic).
+2. **Defense holds at 0% RSR against the adaptive attacker** — the attacker cannot exploit knowledge of the defense because the penalty is monotonic in the score it already maximizes.
+3. **Universal triggers fail** — per-query optimization is required, which demands the attacker know the exact query.
 
 ---
 
@@ -42,7 +50,7 @@ Train a model to predict whether a source is trustworthy, and use that to drive 
 - [x] New `rbench/attack/adaptive.py`: reuse the optimizer loop but change the **objective to the post-defense score** (`score − β·(1−trust)·spread`), so the attacker knows it's penalized and tries to push similarity high enough to survive.
 - [x] Optimize over a **query distribution (T2)**: train one trigger on a train split, evaluate RSR on **held-out** queries.
 - [x] Report the three-column story: **RSR: no defense → defense (static attacker) → defense (adaptive attacker).**
-- [~] Both outcomes are publishable: defense holds (robust) OR defense partially breaks (found the real limit — likely trust-spoofing). **Awaiting SciFact run to determine which outcome.**
+- [x] **Outcome: defense holds.** Adaptive attacker achieves 0% RSR — same as static. Provenance defense is structurally robust (monotonicity argument confirmed empirically). The attacker's next move is trust-spoofing (Phase 6).
 
 ### Phase 4b — Stronger-attacker ablation (ties in Idea A)
 - [ ] Add **greedy coordinate search** as a second attacker (cheap, black-box, no gradient plumbing — often beats CEM in success at higher query cost).
