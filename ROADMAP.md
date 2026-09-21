@@ -19,7 +19,7 @@ Key finding so far: **source-based (provenance) beats content-based (reranker)**
 
 ---
 
-## What I (Sadman) want to do — ideas raised this chat
+## What I want to do 
 
 ### Idea A — Try optimizers other than CEM
 Replace/augment CEM with a stronger black-box optimizer for the trigger search.
@@ -36,13 +36,13 @@ Train a model to predict whether a source is trustworthy, and use that to drive 
 
 ---
 
-## What I (Claude) recommend doing — proposed to-dos
+## proposed to-dos
 
 ### Phase 4 — Defense-aware adaptive attacker (the actual contribution)
-- [ ] New `rbench/attack/adaptive.py`: reuse the optimizer loop but change the **objective to the post-defense score** (`score − β·(1−trust)·spread`), so the attacker knows it's penalized and tries to push similarity high enough to survive.
-- [ ] Optimize over a **query distribution (T2)**: train one trigger on a train split, evaluate RSR on **held-out** queries.
-- [ ] Report the three-column story: **RSR: no defense → defense (static attacker) → defense (adaptive attacker).**
-- [ ] Both outcomes are publishable: defense holds (robust) OR defense partially breaks (found the real limit — likely trust-spoofing).
+- [x] New `rbench/attack/adaptive.py`: reuse the optimizer loop but change the **objective to the post-defense score** (`score − β·(1−trust)·spread`), so the attacker knows it's penalized and tries to push similarity high enough to survive.
+- [x] Optimize over a **query distribution (T2)**: train one trigger on a train split, evaluate RSR on **held-out** queries.
+- [x] Report the three-column story: **RSR: no defense → defense (static attacker) → defense (adaptive attacker).**
+- [~] Both outcomes are publishable: defense holds (robust) OR defense partially breaks (found the real limit — likely trust-spoofing). **Awaiting SciFact run to determine which outcome.**
 
 ### Phase 4b — Stronger-attacker ablation (ties in Idea A)
 - [ ] Add **greedy coordinate search** as a second attacker (cheap, black-box, no gradient plumbing — often beats CEM in success at higher query cost).

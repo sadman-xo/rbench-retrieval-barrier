@@ -24,7 +24,11 @@ Course project — Sadman Bin Tareq (2105040), Rageeb Hasan Shafee (2105175).
       security (RSR down) vs. utility (honest recall down) trade-off against the
       static attacker.
       Run: `python -m rbench.defense.run_defense --dataset scifact --device auto`
-- [ ] Phase 4 — defense-aware adaptive attacker (T2, query-distribution level). ← the contribution.
+- [~] **Phase 4 — adaptive attacker**: defense-aware CEM (post-defense
+      objective) + T2 query-distribution training with held-out evaluation.
+      Two experiments: per-query (static vs. adaptive head-to-head) and
+      T2 universal trigger (train on distribution, test on unseen queries).
+      Run: `python -m rbench.attack.run_adaptive --dataset scifact --device auto`
 - [ ] Phase 5 — evaluation, transferability, writeup.
 
 ## Setup
