@@ -41,6 +41,13 @@ class RetrievalConfig:
     # scaled to each pipeline's own score range so one beta works across dense/hybrid/rerank
     provenance_penalty: float = 0.5
 
+    # --- untrusted-norm cap (Phase 4c) ---
+    # With an unnormalized dot-product retriever (Contriever, TAS-B) similarity is
+    # unbounded, so an attacker can win by inflating its doc's embedding norm. When
+    # set, every untrusted doc (trust < 1) has its norm clipped to this percentile of
+    # the trusted docs' norms. Fitted at index_base() time. None = off.
+    norm_cap_pct: float | None = None
+
     # --- runtime ---
     device: str = "cpu"
     normalize_embeddings: bool = True   # cosine similarity via dot product on unit vectors

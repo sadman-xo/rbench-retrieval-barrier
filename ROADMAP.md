@@ -22,7 +22,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 Key findings:
 1. **Source-based (provenance) beats content-based (reranker)** — the reranker only raises the attacker's budget (100→72) and misses the naive attack; provenance collapses naive AND cem together (attack-agnostic).
-2. **Defense holds at 0% RSR against the adaptive attacker** — the attacker cannot exploit knowledge of the defense because the penalty is monotonic in the score it already maximizes.
+2. **Defense holds at 0% RSR against the adaptive attacker** — the attacker cannot exploit knowledge of the defense because the penalty is monotonic in the score it already maximizes. *Caveat (2026-09-23): all of this is under COSINE similarity (bounded). Whether it survives a dot-product retriever is Phase 4c.*
 3. **Universal triggers fail** — per-query optimization is required, which demands the attacker know the exact query.
 
 ---
@@ -56,6 +56,22 @@ Train a model to predict whether a source is trustworthy, and use that to drive 
 - [x] Add **greedy coordinate search** as a second attacker (cheap, black-box, no gradient plumbing — often beats CEM in success at higher query cost).
 - [ ] Optional: **GCG-on-surrogate** (gradients on a downloaded copy of the embedder, transfer to target) — connects to Phase 5 transferability.
 - [x] **Claim established:** provenance defense is **attack-agnostic**. SciFact results: GCS finds higher-scoring triggers than CEM (0.74 vs 0.51 avg raw score, 100% vs 73% no-defense RSR), uses 12x more queries, but **both hit 0% RSR against the defense**. A better optimizer does not help — the poison is external, and the defense penalizes origin, not content.
+
+### Phase 4c — Norm inflation vs. the defense (dot-product retrievers)
+**Hypothesis.** The Phase 4 robustness needs *bounded* similarity. rbench uses unit-norm embeddings (cosine ≤ 1). Dot-product retrievers (Contriever, TAS-B, DPR, ANCE) score `|e_d|·|q|·cos θ`, so an attacker can grow `|e_d|`. For β < 1 the defended poison score `(1−β)·s_p + β·m` then grows without limit → the soft penalty should break. Only β ≥ 1 stays safe, and β ≥ 1 is hard exclusion of all external docs.
+
+**Prior work — cite, do not claim.** Zhong et al., EMNLP 2023 (arXiv:2310.19156) already showed that white-box HotFlip passages against Contriever have large ℓ2 norms (their Fig. 4) and that clipping ALL passage norms stops the attack at a small recall cost (their Table 5, α sweep). **Our delta:** (1) the interaction with the provenance penalty; (2) a black-box token-level CEM attacker (the source paper's threat model), not white-box; (3) the cap applies to UNTRUSTED docs only, fitted on trusted norms, so trusted docs keep their scores; (4) a per-query certificate.
+
+**Certificate (new, `rbench/defense/certify.py`).** If the poison's raw score is bounded by `B` (B = |q| for cosine, `cap·|q|` with the norm cap, ∞ for raw dot product), then its defended score is at most `m + (1−β)·(B−m)`. If k trusted docs score above that, NO poison text can reach top-k — for any optimizer, white-box included. This answers the "maybe a stronger attacker exists" objection (Tramèr et al.) with a proof, not more attacks. `1 − certified fraction` = the RSR ceiling for any attacker.
+
+- [x] `norm_cap_pct` config + untrusted-norm cap in the pipeline; `with_config()` to evaluate a (β, cap) grid on one index.
+- [x] Cap-aware adaptive attacker (`norm_cap=` in `adaptive.py`). Under the cap, extra norm is worthless, so this objective is genuinely different from the static one.
+- [x] `rbench/attack/run_norm.py`: norm stats, utility + certified fraction per cell, per-query + T2 attacks on the full grid.
+- [x] `tests/test_norm_defense.py` (fake embedders, no downloads): cap logic, the hypothesis in miniature, certificate soundness against the real pipeline code, end-to-end toy run. 10/10 pass.
+- [ ] **Run on SciFact (Colab cell "Phase 4c")**: Contriever dot (test), Contriever cosine (control — same model, only normalization differs), TAS-B dot (second model).
+- [ ] Read the result: does black-box CEM inflate norms at all (table 4, `norm/cap`)? Does "cap OFF, 0<β<1" break (table 5)? Does "cap ON" hold against the adaptive row?
+- [ ] **Check the Phase 3 "sweet spot".** β=0.5 gave recall 0.50 ≈ 0.71 × 0.7 — exactly what full exclusion of the 30% external docs predicts. If `ext_recall` ≈ 0 at β=0.5, then β=0.5 on SciFact is already hard exclusion, and the soft regime lives at smaller β. Report `ext_recall` in every future table.
+- [ ] Follow-up if the cap works: compare against Zhong's GLOBAL clip (all docs) at the same cap — the utility gap is the value of conditioning the cap on provenance.
 
 ### Phase 5 — Learned trust / data-driven provenance (Idea B, done right)
 - [ ] Trust predictor `t̂(d) ∈ [0,1]` from **source-side, non-forgeable features only** (no content).

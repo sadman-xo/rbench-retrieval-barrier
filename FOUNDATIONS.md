@@ -43,6 +43,8 @@ Every item below is a component in `rbench/retriever/`.
       Your pipeline sets `normalize_embeddings=True`, so similarity is bounded.
       Your notes raise the question of whether an attacker can inflate the embedding
       norm on an unnormalized retriever. Read this before you test that.
+      The test is now Phase 4c (`rbench/attack/run_norm.py`). Zhong et al. 2023
+      (READING_LIST Tier 0) already showed norm inflation on Contriever.
 
 - [ ] **Robertson & Zaragoza, "The Probabilistic Relevance Framework: BM25 and Beyond"** —
       FnTIR 3(4), 2009.

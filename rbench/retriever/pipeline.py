@@ -62,8 +62,10 @@ class RetrievalPipeline:
         # --- cached "base" corpus for incremental poison insertion (attack phases) ---
         self._base_docs: list[Doc] = []
         self._base_ids: list[str] = []
-        self._base_emb: np.ndarray | None = None
+        self._base_emb: np.ndarray | None = None       # after the norm cap (if any)
+        self._base_emb_raw: np.ndarray | None = None   # as the embedder returned them
         self._base_tokens: list[list[str]] | None = None
+        self._norm_cap: float | None = None            # fitted untrusted-norm cap (Phase 4c)
 
     # ---- indexing -------------------------------------------------------
     def index(self, docs: list[Doc]) -> "RetrievalPipeline":
@@ -140,10 +142,53 @@ class RetrievalPipeline:
     def index_base(self, docs: list[Doc]) -> "RetrievalPipeline":
         self._base_docs = list(docs)
         self._base_ids = [d.doc_id for d in self._base_docs]
-        self._base_emb = self.embedder.encode([d.text for d in self._base_docs])
+        self._base_emb_raw = self.embedder.encode([d.text for d in self._base_docs])
         self._base_tokens = ([d.text.lower().split() for d in self._base_docs]
                              if self.cfg.hybrid else None)
+        self._fit_norm_cap()
         return self
+
+    def with_config(self, cfg: RetrievalConfig) -> "RetrievalPipeline":
+        """The same indexed base corpus under a different config, with no re-embedding.
+
+        Lets one run evaluate a whole (beta, norm cap) grid for the cost of one index.
+        """
+        other = RetrievalPipeline(self.embedder, cfg)
+        other._base_docs, other._base_ids = self._base_docs, self._base_ids
+        other._base_emb_raw = self._base_emb_raw
+        other._base_tokens = self._base_tokens
+        if cfg.hybrid and other._base_tokens is None:
+            other._base_tokens = [d.text.lower().split() for d in other._base_docs]
+        other._reranker = self._reranker
+        other._fit_norm_cap()
+        return other
+
+    # ---- untrusted-norm cap (Phase 4c) ----------------------------------
+    # Dot-product similarity is |e_d| |q| cos(theta): an attacker who cannot turn the
+    # angle further can still win by growing |e_d|. Clipping untrusted norms to what
+    # trusted docs look like bounds that, and leaves every trusted doc's score as is.
+    def _trust(self, doc: Doc) -> float:
+        return self.cfg.trust_weights.get(doc.provenance, 0.0)
+
+    def _fit_norm_cap(self) -> None:
+        """Fit the cap on trusted-doc norms, then build the capped base embeddings."""
+        self._norm_cap = None
+        if self.cfg.norm_cap_pct is not None and len(self._base_docs):
+            norms = np.linalg.norm(self._base_emb_raw, axis=1)
+            trusted = np.array([self._trust(d) >= 1.0 for d in self._base_docs])
+            ref = norms[trusted] if trusted.any() else norms
+            self._norm_cap = float(np.percentile(ref, self.cfg.norm_cap_pct))
+        self._base_emb = self._cap_norms(self._base_emb_raw, self._base_docs)
+
+    def _cap_norms(self, emb: np.ndarray, docs) -> np.ndarray:
+        """Clip the embedding norm of every untrusted doc (trust < 1) to the cap."""
+        if self._norm_cap is None:
+            return emb
+        norms = np.linalg.norm(emb, axis=1)
+        untrusted = np.array([self._trust(d) < 1.0 for d in docs])
+        scale = np.where(untrusted & (norms > self._norm_cap),
+                         self._norm_cap / np.maximum(norms, 1e-12), 1.0)
+        return (emb * scale[:, None]).astype(np.float32)
 
     def _get_reranker(self):
         if self._reranker is None:
@@ -200,7 +245,7 @@ class RetrievalPipeline:
 
     def search_with_extra(self, query_id: str, query_text: str, extra: Doc) -> RetrievalResult:
         """Retrieval over base corpus + one extra (poison) doc, reusing cached base embeddings."""
-        extra_emb = self.embedder.encode_one(extra.text)[None, :]
+        extra_emb = self._cap_norms(self.embedder.encode_one(extra.text)[None, :], [extra])
         emb = np.vstack([self._base_emb, extra_emb])
         ids = self._base_ids + [extra.doc_id]
         docs = self._base_docs + [extra]

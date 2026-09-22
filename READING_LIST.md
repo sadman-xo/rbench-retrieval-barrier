@@ -29,6 +29,11 @@ These five give you the whole problem statement. Read them in this order.
       Take from it: your T2 query-distribution setting comes from here. Their result
       (transfer works with ~500 passages) is the contrast for your 0% T2 result with
       one passage.
+      **Also (checked 2026-09-23):** their adversarial passages against Contriever have
+      large ℓ2 norms (Fig. 4), and they test norm clipping of ALL passages as a defense
+      (Eq. 4, Table 5 in Appendix C). So norm inflation and norm clipping are theirs.
+      Cite them in Phase 4c; our delta is the provenance interaction, a black-box
+      attacker, an untrusted-only cap, and a certificate.
 
 - [ ] **Zou et al., "PoisonedRAG: Knowledge Corruption Attacks to RAG"** —
       arXiv:2402.07867, USENIX Security 2025.
