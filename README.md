@@ -34,6 +34,14 @@ Course project — Sadman Bin Tareq (2105040), Rageeb Hasan Shafee (2105175).
       (0.74 vs 0.51 avg, 100% vs 73% no-defense RSR) but **both hit 0% RSR**
       against the defense. The defense is attack-agnostic.
       Run: `python -m rbench.attack.run_phase4b --dataset scifact --device auto`
+- [x] **Phase 4c — norm inflation + certificate**: dot-product retrievers
+      (Contriever-ms, TAS-B) vs. a cosine control, an untrusted-only norm cap, and a
+      per-query certificate that bounds RSR for ANY attacker. SciFact: black-box CEM
+      barely inflates norms, so dot product did not break the defense and the cap
+      changed no RSR number. But the naive query echo beats β=0.5 (20–47% RSR), and
+      0% RSR for every attacker needs β≥0.75, where no external evidence is
+      retrieved — the soft penalty is hard exclusion in practice. See ROADMAP.md.
+      Run: `python -m rbench.attack.run_norm --dataset scifact --device auto`
 - [ ] Phase 5 — learned trust, transferability, writeup.
 
 ## Setup
@@ -83,12 +91,15 @@ rbench/
     run_attack.py      # Phase 2 runner
     run_adaptive.py    # Phase 4 runner (adaptive + T2)
     run_phase4b.py     # Phase 4b runner (CEM vs GCS ablation)
+    run_norm.py        # Phase 4c runner (dot product vs. cosine, norm cap, certificate)
   defense/
     provenance.py      # provenance assignment for honest evaluation
+    certify.py         # per-query certificate: RSR ceiling for any attacker (Phase 4c)
     run_defense.py     # Phase 3 runner (beta sweep)
   eval/
     metrics.py         # recall@k, MRR
     sanity.py          # Phase 1 smoke test
+tests/                 # fake-embedder tests, no downloads: python -m pytest tests
 data/toy_corpus.json   # synthetic lab corpus (all content fabricated; inert poison doc)
 results/               # experiment outputs (JSON per phase)
 ```

@@ -12,7 +12,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 - [x] **Phase 1 — Testbed.** RAG retriever, switchable dense-only vs. hybrid(dense+BM25)+cross-encoder rerank; incremental poison insertion for BEIR-scale corpora; `--device auto` (CPU↔T4).
 - [x] **Phase 2 — Attack.** Black-box, token-level CEM trigger optimizer (faithful to the USENIX'26 method, independently implemented). SciFact (5k docs, 50 q): none=0%, cem=**100% dense / 72% hybrid+rerank**, naive=100%/100%. Honest recall@5=0.71.
-- [x] **Phase 3 — Defense.** Provenance-weighted retrieval: `score' = score − β·(1−trust)·spread`. SciFact β-sweep (confirmed real): β=0 → RSR 100%/100%; **β=0.5 (sweet spot) → 8% naive / 6% cem**, recall 0.71→0.50; β≥0.75 → 0%. Recall floor ~0.50 is structural (30% of relevant docs are legitimately external).
+- [x] **Phase 3 — Defense.** Provenance-weighted retrieval: `score' = score − β·(1−trust)·spread`. SciFact β-sweep (confirmed real): β=0 → RSR 100%/100%; **β=0.5 (sweet spot) → 8% naive / 6% cem** *(2026-09-24: this "sweet spot" is almost hard exclusion — ext_recall ≈ 0 at β = 0.5 on three other embedders; see Phase 4c)*, recall 0.71→0.50; β≥0.75 → 0%. Recall floor ~0.50 is structural (30% of relevant docs are legitimately external).
 - [x] **Progress deck** — `slides/rbench_progress.tex` (Beamer, Phases 1–3). Compile on Colab/Overleaf (no LaTeX locally).
 
 - [x] **Phase 4 — Adaptive attacker (the contribution).** Defense-aware CEM + T2 query-distribution training. SciFact results (β=0.5, 35 train / 15 held-out test):
@@ -22,7 +22,7 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
 Key findings:
 1. **Source-based (provenance) beats content-based (reranker)** — the reranker only raises the attacker's budget (100→72) and misses the naive attack; provenance collapses naive AND cem together (attack-agnostic).
-2. **Defense holds at 0% RSR against the adaptive attacker** — the attacker cannot exploit knowledge of the defense because the penalty is monotonic in the score it already maximizes. *Caveat (2026-09-23): all of this is under COSINE similarity (bounded). Whether it survives a dot-product retriever is Phase 4c.*
+2. **Defense holds at 0% RSR against the adaptive attacker** — the attacker cannot exploit knowledge of the defense because the penalty is monotonic in the score it already maximizes. *Caveat (2026-09-24, Phase 4c): the 0% is against CEM, which is WEAKER than the naive query echo on Contriever/TAS-B; the echo gets 20–47% at β = 0.5. On SciFact, 0% RSR for every attacker needs β ≥ 0.75, where no external evidence is retrieved (hard exclusion).*
 3. **Universal triggers fail** — per-query optimization is required, which demands the attacker know the exact query.
 
 ---
@@ -68,10 +68,42 @@ Train a model to predict whether a source is trustworthy, and use that to drive 
 - [x] Cap-aware adaptive attacker (`norm_cap=` in `adaptive.py`). Under the cap, extra norm is worthless, so this objective is genuinely different from the static one.
 - [x] `rbench/attack/run_norm.py`: norm stats, utility + certified fraction per cell, per-query + T2 attacks on the full grid.
 - [x] `tests/test_norm_defense.py` (fake embedders, no downloads): cap logic, the hypothesis in miniature, certificate soundness against the real pipeline code, end-to-end toy run. 10/10 pass.
-- [ ] **Run on SciFact (Colab cell "Phase 4c")**: Contriever dot (test), Contriever cosine (control — same model, only normalization differs), TAS-B dot (second model).
-- [ ] Read the result: does black-box CEM inflate norms at all (table 4, `norm/cap`)? Does "cap OFF, 0<β<1" break (table 5)? Does "cap ON" hold against the adaptive row?
-- [ ] **Check the Phase 3 "sweet spot".** β=0.5 gave recall 0.50 ≈ 0.71 × 0.7 — exactly what full exclusion of the 30% external docs predicts. If `ext_recall` ≈ 0 at β=0.5, then β=0.5 on SciFact is already hard exclusion, and the soft regime lives at smaller β. Report `ext_recall` in every future table.
-- [ ] Follow-up if the cap works: compare against Zhong's GLOBAL clip (all docs) at the same cap — the utility gap is the value of conditioning the cap on provenance.
+- [x] **Run on SciFact (2026-09-24, T4)**: 5000 docs (1475 external), 50 queries (35 train / 15 test), k=5, CEM 12 tokens × 40 iters × 96 samples, cap = p99 of trusted norms. No certificate violations in any arm.
+
+**Results — RSR@5 on 15 held-out queries at β = 0 / 0.25 / 0.5 / 0.75 / 1.0 (cap OFF; cap ON gave the SAME attack numbers in every arm)**
+
+| Arm | naive | static CEM | adaptive CEM | T2 (both) | ceiling, cap off → on (β=0.5) |
+|---|---|---|---|---|---|
+| Contriever-ms, dot | 100 / 93 / **40** / 0 / 0 | 60 / 7 / 0 / 0 / 0 | 47 / 7 / 0 / 0 / 0 | 0 everywhere | 100% → 93% |
+| Contriever-ms, cosine (control) | 100 / 100 / **47** / 0 / 0 | 47 / 0 / 0 / 0 / 0 | = static (identical run) | 0 everywhere | 53% → 53% |
+| TAS-B, dot | 100 / 93 / **20** / 0 / 0 | 47 / 0 / 0 / 0 / 0 | 47 / 0 / 0 / 0 / 0 | 0 everywhere | 100% → 93% |
+
+**Utility — recall / ext_recall (recall of relevant EXTERNAL docs), 50 queries**
+
+| β | Contriever dot | Contriever cosine | TAS-B dot |
+|---|---|---|---|
+| 0 | 0.68 / 0.69 | 0.74 / 0.68 | 0.63 / 0.60 |
+| 0.25 | 0.56 / 0.19 | 0.64 / 0.14 | 0.57 / 0.27 |
+| 0.5 | 0.52 / **0.06** | 0.61 / **0.00** | 0.49 / **0.00** |
+| ≥ 0.75 | 0.50 / 0.00 | 0.61 / 0.00 | 0.49 / 0.00 |
+
+Certified share (50 queries): raw dot, cap off → 0% for every β < 1, 100% at β = 1 (as the theory says). Cap on → 2% at β = 0.5, **100% at β = 0.75**. Cosine → 42% at β = 0.5, 100% at β ≥ 0.75.
+
+**Findings**
+1. **Hypothesis not confirmed for this attacker.** Black-box CEM inflates norms only a little: static poisons sit at 0.97× the cap on average (max 1.02×; 20% above p99 on Contriever, 0% on TAS-B). Zhong's white-box passages reached ~1.3×. Dot product did not raise RSR over cosine, and the cap changed no RSR number. The door stays open in theory: under raw dot product NOTHING is certified for β < 1, so a stronger attacker could still use norm. The cap closes it provably from β = 0.75 (dot, cap on: 100% certified) instead of only β = 1.
+2. **The naive query echo is the strongest attacker, and it beats β = 0.5** (40% / 47% / 20%). CEM triggers reach cosine ≈ 0.5 with the query; the echo reaches ≈ 0.9. Our CEM budget (3,840 scored candidates per trigger) is ~40× below the paper's (30 × 5000 = 150,000). So CEM "0%" numbers overstate the defense. On MiniLM (Phase 3) naive was 8% at β = 0.5 — the β = 0.5 result does not carry over to other embedders.
+3. **There is no soft regime on SciFact.** RSR reaches 0 for every attacker only where ext_recall is ≈ 0 (β ≥ 0.75). Where external evidence still gets through (β = 0.25, ext_recall 0.14–0.27), the naive echo gets 93–100%. The Phase 3 "sweet spot" β = 0.5 has ext_recall 0.06 / 0.00 / 0.00 — it is (almost) hard exclusion. This independently reproduces the trade-off in arXiv:2608.21230 (a weight big enough to stop the poison excludes all untrusted evidence), now with optimized attackers, three embedders, and a certificate.
+4. **The certificate is close to tight.** Cosine arm, β = 0.5: ceiling 53%, naive reaches 47%.
+5. **Rank-invariance confirmed.** Under cosine the adaptive run is identical to the static run (same RSR, same cosine 0.520, same T2 trigger): CEM uses only ranks, and the adaptive objective is a monotone transform of the raw score.
+6. **T2 universal triggers: 0% on all three models, even with no defense.**
+7. **Sample size.** 15 test queries: 0/15 only shows RSR < 20% at 95% confidence (Wilson); 6/15 = 40% has a CI of about 20–64%.
+
+**Next (in order)**
+- [ ] **Query-echo + CEM suffix attacker** — start from the query text (cosine ≈ 0.9) and let CEM add tokens. This is the right test of the norm hypothesis (high angle AND extra norm) and the strongest cheap attacker we have. Compare dot vs. cosine vs. cap on.
+- [ ] **More queries** — per-query attacks on all 300 SciFact test queries (cheap on the H100), so the CIs shrink.
+- [ ] **Cap percentile sweep** (p50 / p75 / p90 / p99) — utility + certificate only, no attacks. A p99 cap still lets a poison carry ~12% more norm than a typical doc; a tighter cap should move dot-product certification toward the cosine arm.
+- [ ] **Bounded occupancy (the unbuilt fix in 2608.21230)** — give untrusted docs at most j of the k slots. Security becomes "the poison takes at most j slots; trusted evidence always keeps k − j", which can admit external evidence AND be certified. This is the candidate contribution now that finding 3 rules out the soft penalty.
+- [ ] Follow-up: compare against Zhong's GLOBAL clip (all docs) at the same cap — the utility gap is the value of conditioning the cap on provenance.
 
 ### Phase 5 — Learned trust / data-driven provenance (Idea B, done right)
 - [ ] Trust predictor `t̂(d) ∈ [0,1]` from **source-side, non-forgeable features only** (no content).
