@@ -99,8 +99,8 @@ Certified share (50 queries): raw dot, cap off → 0% for every β < 1, 100% at 
 7. **Sample size.** 15 test queries: 0/15 only shows RSR < 20% at 95% confidence (Wilson); 6/15 = 40% has a CI of about 20–64%.
 
 **Next (in order)**
-- [ ] **Query-echo + CEM suffix attacker** — start from the query text (cosine ≈ 0.9) and let CEM add tokens. This is the right test of the norm hypothesis (high angle AND extra norm) and the strongest cheap attacker we have. Compare dot vs. cosine vs. cap on.
-- [ ] **More queries** — per-query attacks on all 300 SciFact test queries (cheap on the H100), so the CIs shrink.
+- [~] **Query-echo + CEM suffix attacker** (coded 2026-09-24: `rbench/attack/echo.py`, rows `echo+static` / `echo+adaptive` in `run_norm.py`; keeps the bare echo if no suffix beats it; SciFact run 2 pending) — start from the query text (cosine ≈ 0.9) and let CEM add tokens. This is the right test of the norm hypothesis (high angle AND extra norm) and the strongest cheap attacker we have. Compare dot vs. cosine vs. cap on.
+- [~] **More queries** — run 2 uses all 300 SciFact test queries (210 train / 90 test), so the CIs shrink. Pending.
 - [ ] **Cap percentile sweep** (p50 / p75 / p90 / p99) — utility + certificate only, no attacks. A p99 cap still lets a poison carry ~12% more norm than a typical doc; a tighter cap should move dot-product certification toward the cosine arm.
 - [ ] **Bounded occupancy (the unbuilt fix in 2608.21230)** — give untrusted docs at most j of the k slots. Security becomes "the poison takes at most j slots; trusted evidence always keeps k − j", which can admit external evidence AND be certified. This is the candidate contribution now that finding 3 rules out the soft penalty.
 - [ ] Follow-up: compare against Zhong's GLOBAL clip (all docs) at the same cap — the utility gap is the value of conditioning the cap on provenance.

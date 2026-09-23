@@ -26,6 +26,12 @@ Attackers (per-query on the test split; T2 = train split -> held-out test split)
   static    maximize the raw score e_p . q -- defense-unaware, so it rewards norm
   adaptive  maximize the post-defense score WITH the cap applied, at --beta
             (defense-aware; the attacker that matters for the cap-on cells)
+  echo+static / echo+adaptive
+            the query text as a FIXED prefix, CEM chooses only the suffix, with
+            the static / adaptive objective (per-query only; rbench/attack/echo.py).
+            The first SciFact run showed the echo beats uniform-start CEM, so this
+            starts from the strongest point; under a dot product the suffix can
+            also add norm. The plain echo is kept if no suffix beats it.
 An adaptive attacker against the penalty alone is not run: CEM uses only the RANK
 of scores, and that objective is a monotone function of the raw score for beta < 1,
 so its run is identical to the static one.
@@ -58,6 +64,7 @@ from ..retriever.beir_loader import load_beir
 from ..defense.provenance import assign_provenance
 from ..defense.certify import certify_query
 from .cem import CEMConfig, optimize_tokens
+from .echo import optimize_echo_suffix
 from .adaptive import (
     make_perquery_score_fn,
     make_static_score_fn,
@@ -219,17 +226,23 @@ def main() -> None:
     print("\n" + "=" * 72)
     print("3. Optimizing triggers")
     print("=" * 72)
-    triggers: dict[str, dict[str, str]] = {"naive": {}, "static": {}, "adaptive": {}}
+    triggers: dict[str, dict[str, str]] = {
+        name: {} for name in ("naive", "static", "adaptive", "echo+static", "echo+adaptive")}
+    suffix_won: dict[str, list[bool]] = {"echo+static": [], "echo+adaptive": []}
     for i, q in enumerate(test_q, 1):
         qv = q_vecs[q.query_id]
+        static_fn = make_static_score_fn(embedder, qv, payload=PAYLOAD)
+        adaptive_fn = make_perquery_score_fn(embedder, qv, attack_pipe._base_emb @ qv, args.beta,
+                                             trust_ext, payload=PAYLOAD, norm_cap=norm_cap)
         triggers["naive"][q.query_id] = q.text
         triggers["static"][q.query_id] = optimize_tokens(
-            tok, make_static_score_fn(embedder, qv, payload=PAYLOAD),
-            cem_cfg, device=device).best_trigger
+            tok, static_fn, cem_cfg, device=device).best_trigger
         triggers["adaptive"][q.query_id] = optimize_tokens(
-            tok, make_perquery_score_fn(embedder, qv, attack_pipe._base_emb @ qv, args.beta,
-                                        trust_ext, payload=PAYLOAD, norm_cap=norm_cap),
-            cem_cfg, device=device).best_trigger
+            tok, adaptive_fn, cem_cfg, device=device).best_trigger
+        for name, fn in (("echo+static", static_fn), ("echo+adaptive", adaptive_fn)):
+            trig, won = optimize_echo_suffix(tok, fn, q.text, cem_cfg, device=device)
+            triggers[name][q.query_id] = trig
+            suffix_won[name].append(won)
         if i % 5 == 0 or i == len(test_q):
             print(f"  per-query: [{i}/{len(test_q)}] test queries done")
 
@@ -262,6 +275,8 @@ def main() -> None:
         poison_stats[name] = {"norm_over_cap": ratio.tolist(), "cos": cos.tolist()}
         print(f"{name:<14}{ratio.mean():>15.3f}{ratio.max():>8.3f}"
               f"{(ratio > 1 + FLOAT_SLACK).mean()*100:>10.0f}%{cos.mean():>10.3f}")
+    for name, won in suffix_won.items():
+        print(f"  {name}: the CEM suffix beat the bare echo on {sum(won)}/{len(won)} queries")
 
     # ── 5. RSR over the grid ───────────────────────────────────────────
     def rsr_grid(by_q):
@@ -279,13 +294,13 @@ def main() -> None:
     print("=" * 72)
     violations = []
     for cap in (False, True):
-        print(f"\n  {'cap ' + ('ON' if cap else 'OFF'):<11}"
+        print(f"\n  {'cap ' + ('ON' if cap else 'OFF'):<14}"
               + "".join(f"{'b=' + format(b, 'g'):>8}" for b in betas))
         for name, grid in grids.items():
-            print(f"  {name:<11}" + "".join(f"{grid[(b, cap)]*100:>7.0f}%" for b in betas))
+            print(f"  {name:<14}" + "".join(f"{grid[(b, cap)]*100:>7.0f}%" for b in betas))
             violations += [(name, b, cap) for b in betas
                            if grid[(b, cap)] > bound[(b, cap)] + 1e-9]
-        print(f"  {'max any':<11}" + "".join(f"{bound[(b, cap)]*100:>7.0f}%" for b in betas)
+        print(f"  {'max any':<14}" + "".join(f"{bound[(b, cap)]*100:>7.0f}%" for b in betas)
               + "   <- 1 - certified: the ceiling for ANY attacker")
     if violations:
         print(f"\n  WARNING: RSR above the certified ceiling in {violations} -- a bug.")
@@ -293,7 +308,9 @@ def main() -> None:
     print("\nHow to read this:")
     print("  * cap OFF, b in (0,1): the hypothesis. High static RSR here with sim=dot but not")
     print("    with --normalize means norm inflation breaks the penalty alone.")
-    print("  * cap ON, b=attack beta, row 'adaptive': the fix against a defense-aware attacker.")
+    print("  * cap ON, b=attack beta, rows 'adaptive' and 'echo+adaptive': the fix against a")
+    print("    defense-aware attacker. 'echo+static' vs 'naive' with cap OFF under sim=dot is")
+    print("    the cleanest norm test: a gain there that the cap removes is norm inflation.")
     print("  * b=1 is hard exclusion: safe always, but ext_recall in table 2 shows its cost.")
 
     # ── save ───────────────────────────────────────────────────────────
@@ -315,8 +332,11 @@ def main() -> None:
         "rsr": {name: {cell_key(c): v for c, v in grid.items()} for name, grid in grids.items()},
         "max_any_attacker_test": {cell_key(c): v for c, v in bound.items()},
         "poison_stats": poison_stats,
+        "echo_suffix_won": {name: won for name, won in suffix_won.items()},
         "triggers": {"per_query_static": triggers["static"],
                      "per_query_adaptive": triggers["adaptive"],
+                     "echo_static": triggers["echo+static"],
+                     "echo_adaptive": triggers["echo+adaptive"],
                      "t2_static": t2_static, "t2_adaptive": t2_adaptive},
         "certificate_violations": [list(v) for v in violations],
     }

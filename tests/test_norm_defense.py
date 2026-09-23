@@ -5,6 +5,7 @@
     dot product, and the cap stops it
   * certificate soundness: whenever certify_query says "certified", no poison vector
     (worst case included) reaches top-k in the REAL pipeline code
+  * the echo + CEM suffix attacker is never worse than the bare echo on its objective
   * run_norm.main() runs end to end on the toy corpus
 """
 from __future__ import annotations
@@ -211,6 +212,28 @@ class BagOfWordsEmbedder:
         return self.encode([text])[0]
 
 
+# ── the echo + CEM suffix attacker ───────────────────────────────────────
+def test_echo_suffix_used_only_when_it_helps():
+    pytest.importorskip("torch")
+    from rbench.attack.cem import CEMConfig
+    from rbench.attack.echo import optimize_echo_suffix
+
+    tok = FakeTokenizer(["good", "bad", "filler"])
+    cfg = CEMConfig(trigger_len=3, n_iters=5, n_samples=16, seed=0)
+
+    def rewards_good(cands):                 # a suffix of "good" tokens helps
+        return np.array([c.split().count("good") for c in cands], dtype=float)
+
+    trig, won = optimize_echo_suffix(tok, rewards_good, "what is x", cfg)
+    assert won and trig.startswith("what is x ") and "good" in trig
+
+    def punishes_length(cands):              # every suffix hurts: keep the bare echo
+        return np.array([-len(c.split()) for c in cands], dtype=float)
+
+    trig, won = optimize_echo_suffix(tok, punishes_length, "what is x", cfg)
+    assert not won and trig == "what is x"
+
+
 @pytest.mark.parametrize("normalize", [False, True])
 def test_run_norm_end_to_end_on_toy(monkeypatch, tmp_path, normalize):
     pytest.importorskip("torch")
@@ -228,6 +251,8 @@ def test_run_norm_end_to_end_on_toy(monkeypatch, tmp_path, normalize):
     out = json.loads((tmp_path / f"phase4c_norm_toy_bow_"
                       f"{'cosine' if normalize else 'dot'}.json").read_text())
     assert out["certificate_violations"] == []
-    assert set(out["rsr"]) == {"naive", "static", "adaptive", "T2 static", "T2 adaptive"}
+    assert set(out["rsr"]) == {"naive", "static", "adaptive", "echo+static", "echo+adaptive",
+                               "T2 static", "T2 adaptive"}
+    assert set(out["echo_suffix_won"]) == {"echo+static", "echo+adaptive"}
     assert len(out["utility"]) == 10                   # 5 betas x cap off/on
     assert out["norms"]["cap"] > 0
