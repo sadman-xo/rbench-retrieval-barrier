@@ -5,6 +5,8 @@
 docs/
 # third-party paper PDFs
 papers/
+# day-to-day planning notes
+temporary_planning/
 
 # --- python ---
 __pycache__/
