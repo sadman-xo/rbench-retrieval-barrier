@@ -12,12 +12,9 @@ _os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 """rbench — Retrieval-Barrier benchmark.
 
-A small, CPU-portable testbed for studying indirect prompt injection at the
-retrieval stage (arXiv:2601.07072), extended toward provenance-weighted defense
-and a defense-aware adaptive attacker.
-
-Phase 1 (this stage): the RAG testbed — corpus, embedder, and a retrieval
-pipeline that can run dense-only or the full hybrid (dense + BM25) + reranker path.
+Research code for indirect prompt injection at the retrieval stage
+(arXiv:2601.07072): attack reproduction, provenance-aware defenses with
+per-query certificates, and a defense-aware adaptive attacker.
 """
 
 __version__ = "0.1.0"

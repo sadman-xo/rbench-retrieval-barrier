@@ -1,10 +1,12 @@
 # rbench — Retrieval-Barrier benchmark
 
-A small, CPU-portable testbed for studying **indirect prompt injection at the retrieval
-stage** (arXiv:2601.07072 — *Overcoming the Retrieval Barrier*), extended toward a
-**provenance-weighted defense** evaluated against a **defense-aware adaptive attacker**.
+Research code for **indirect prompt injection at the retrieval stage**. It reproduces the
+black-box trigger attack of arXiv:2601.07072 (*Overcoming the Retrieval Barrier*) and
+studies **provenance-aware defenses** (provenance weighting, an untrusted-only norm cap,
+bounded occupancy) with per-query certificates, evaluated against a **defense-aware
+adaptive attacker**.
 
-Course project — Sadman Bin Tareq (2105040), Rageeb Hasan Shafee (2105175).
+Authors: Sadman Bin Tareq, Rageeb Hasan Shafee.
 
 ## Status
 
