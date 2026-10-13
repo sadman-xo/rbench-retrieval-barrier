@@ -300,7 +300,8 @@ def main() -> None:
     RESULTS_DIR.mkdir(exist_ok=True)
     out = {
         "config": {
-            "dataset": args.dataset, "embedder": args.embedder, "sim": sim, "device": device,
+            "dataset": args.dataset, "max_docs": args.max_docs, "max_queries": args.max_queries,
+            "embedder": args.embedder, "sim": sim, "device": device,
             "k": k, "betas": betas, "js": [jname(j) for j in js], "ms": ms,
             "attack_beta": args.beta, "cap_pct": cap_pct, "external_frac": args.external_frac,
             "corpus_size": len(base), "n_external": n_ext, "n_queries": len(queries),
