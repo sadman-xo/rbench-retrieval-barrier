@@ -98,9 +98,55 @@ Certified share (50 queries): raw dot, cap off → 0% for every β < 1, 100% at 
 6. **T2 universal triggers: 0% on all three models, even with no defense.**
 7. **Sample size.** 15 test queries: 0/15 only shows RSR < 20% at 95% confidence (Wilson); 6/15 = 40% has a CI of about 20–64%.
 
+---
+
+#### Run 2 (2026-10-13, T4) — echo+CEM attacker, 300 queries
+
+Same three arms, same seed. Now 300 SciFact queries (210 train / 90 test), k=5, CEM 12 tokens × 40 iters × 96 samples, cap = p99 of trusted norms. Adds the `echo+static` / `echo+adaptive` attackers (query text + CEM suffix). No certificate violations in any arm.
+
+**RSR@5 on 90 held-out test queries at β = 0 / 0.25 / 0.5 / 0.75 / 1.0 (cap OFF)**
+
+| Arm | naive echo | echo+static | echo+adaptive | static CEM | ceiling (max any) |
+|---|---|---|---|---|---|
+| Contriever-ms, dot | 100 / 98 / 22 / 0 / 0 | 100 / 100 / **52** / 0 / 0 | 100 / 100 / 48 / 0 / 0 | 57 / 3 / 0 / 0 / 0 | 100 / 100 / 100 / 100 / 0 |
+| Contriever-ms, cosine (control) | 100 / 100 / 34 / 0 / 0 | 100 / 100 / **49** / 0 / 0 | 100 / 100 / 49 / 0 / 0 | 37 / 3 / 0 / 0 / 0 | 100 / 100 / 72 / 0 / 0 |
+| TAS-B, dot | 100 / 98 / 16 / 0 / 0 | 100 / 100 / **38** / 0 / 0 | 100 / 100 / 36 / 0 / 0 | 47 / 2 / 0 / 0 / 0 | 100 / 100 / 100 / 100 / 0 |
+
+T2 (static and adaptive) = 0% everywhere, all three arms.
+
+**Effect of the norm cap at β = 0.5 (cap OFF → ON)**
+
+| Arm | echo+static | echo+adaptive | ceiling (max any) |
+|---|---|---|---|
+| Contriever-ms, dot | 52% → **40%** | 48% → 48% | 100% → 94% |
+| TAS-B, dot | 38% → **33%** | 36% → 36% | 100% → 98% |
+| Contriever cosine | 49% → 49% (no change) | 49% → 49% | 72% → 72% |
+
+**Utility — recall / ext_recall (300 queries)**
+
+| β | Contriever dot | Contriever cosine | TAS-B dot |
+|---|---|---|---|
+| 0 | 0.745 / 0.807 | 0.735 / 0.635 | 0.705 / 0.738 |
+| 0.25 | 0.577 / 0.274 | 0.609 / 0.250 | 0.621 / 0.274 |
+| 0.5 | 0.490 / **0.019** | 0.507 / **0.000** | 0.548 / **0.000** |
+| ≥ 0.75 | 0.483 / 0.000 | 0.507 / 0.000 | 0.548 / 0.000 |
+
+Certified share (cap ON): Contriever dot 4% @β=0.5, **99% @β=0.75**; TAS-B dot 1% @β=0.5, 99% @β=0.75; cosine 26% @β=0.5, 100% @β=0.75.
+
+**Findings (run 2)**
+1. **echo+CEM is the strongest attacker, and the CEM suffix adds real lift.** It beat the bare query echo on 89–90 of 90 queries in every arm. echo+static reaches 52% / 49% / 38% at β=0.5 (vs naive 22% / 34% / 16%). This confirms run 1's "naive echo beats CEM" and goes further: optimizing a suffix on top of the echo is better still.
+2. **Norm inflation is real but modest, and the cap is only a partial fix.** Under Contriever-dot, echo+static pushed 58% of poisons above the cap (max 1.11×). The cap cut its β=0.5 RSR 52% → 40% (TAS-B 38% → 33%). But echo+**adaptive** keeps only 11% of poisons above the cap, so the cap does not touch it (48% → 48%). A defense-aware attacker evades the cap.
+3. **High β still blocks everything.** Every attacker hits 0% RSR at β ≥ 0.75 in all three arms. The cap plus β=0.75 certifies 99% of queries (dot). But β=0.75 costs utility: recall 0.745 → 0.483, ext_recall → 0.
+4. **No soft regime (reconfirmed, tighter CIs).** The drop from ~48% (β=0.5) to 0% (β=0.75) is a cliff. Where external evidence still flows (β=0.25, ext_recall 0.25–0.27) echo+CEM gets 100%.
+5. **T2 universal triggers fail everywhere (0%), even with no defense.**
+
+**Headline.** The untrusted-norm cap does not save the dot-product defense against a defense-aware echo+adaptive attacker. Only a high penalty (β ≥ 0.75) blocks all attackers, at a recall cost — a negative result for the "cap the untrusted norm" idea and the motivation for bounded occupancy.
+
+---
+
 **Next (in order)**
-- [~] **Query-echo + CEM suffix attacker** (coded 2026-09-24: `rbench/attack/echo.py`, rows `echo+static` / `echo+adaptive` in `run_norm.py`; keeps the bare echo if no suffix beats it; SciFact run 2 pending) — start from the query text (cosine ≈ 0.9) and let CEM add tokens. This is the right test of the norm hypothesis (high angle AND extra norm) and the strongest cheap attacker we have. Compare dot vs. cosine vs. cap on.
-- [~] **More queries** — run 2 uses all 300 SciFact test queries (210 train / 90 test), so the CIs shrink. Pending.
+- [x] **Query-echo + CEM suffix attacker** — done (run 2, 2026-10-13). `echo+static` / `echo+adaptive` in `run_norm.py`. See the run-2 block above.
+- [x] **More queries** — done. Run 2 used all 300 SciFact queries (210 train / 90 test).
 - [ ] **Cap percentile sweep** (p50 / p75 / p90 / p99) — utility + certificate only, no attacks. A p99 cap still lets a poison carry ~12% more norm than a typical doc; a tighter cap should move dot-product certification toward the cosine arm.
 - [ ] **Bounded occupancy (the unbuilt fix in 2608.21230)** — give untrusted docs at most j of the k slots. Security becomes "the poison takes at most j slots; trusted evidence always keeps k − j", which can admit external evidence AND be certified. This is the candidate contribution now that finding 3 rules out the soft penalty.
 - [ ] Follow-up: compare against Zhong's GLOBAL clip (all docs) at the same cap — the utility gap is the value of conditioning the cap on provenance.

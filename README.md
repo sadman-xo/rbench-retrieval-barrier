@@ -36,12 +36,15 @@ Course project — Sadman Bin Tareq (2105040), Rageeb Hasan Shafee (2105175).
       Run: `python -m rbench.attack.run_phase4b --dataset scifact --device auto`
 - [x] **Phase 4c — norm inflation + certificate**: dot-product retrievers
       (Contriever-ms, TAS-B) vs. a cosine control, an untrusted-only norm cap, and a
-      per-query certificate that bounds RSR for ANY attacker. SciFact: black-box CEM
-      barely inflates norms, so dot product did not break the defense and the cap
-      changed no RSR number. But the naive query echo beats β=0.5 (20–47% RSR), and
-      0% RSR for every attacker needs β≥0.75, where no external evidence is
-      retrieved — the soft penalty is hard exclusion in practice. See ROADMAP.md.
-      Run: `python -m rbench.attack.run_norm --dataset scifact --device auto`
+      per-query certificate that bounds RSR for ANY attacker.
+      Run 2 (2026-10-13, 300 SciFact queries, echo+CEM attacker): the **echo+CEM
+      suffix** is the strongest attacker — it beats the bare echo on 89–90/90 queries
+      and reaches **38–52% RSR at β=0.5**. The norm cap is only a **partial fix**: it
+      cuts echo+static (52→40% on Contriever-dot) but a defense-aware echo+adaptive
+      stays under the cap (48→48%). **0% RSR for every attacker needs β≥0.75**, where
+      external recall is 0 (hard exclusion) and overall recall drops 0.745→0.483.
+      Negative result for the norm-cap idea; motivates bounded occupancy. See ROADMAP.md.
+      Run: `python -m rbench.attack.run_norm --dataset scifact --max-queries 300 --device auto`
 - [ ] Phase 5 — learned trust, transferability, writeup.
 
 ## Setup
