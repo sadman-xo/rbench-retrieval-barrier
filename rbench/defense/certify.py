@@ -60,3 +60,26 @@ def certify_query(base_scores: np.ndarray, trusted: np.ndarray, q_vec: np.ndarra
         bound = (1.0 - beta) * max(b, m) + beta * m
     margin = tau_k - bound
     return margin > 0, margin
+
+
+# ── bounded occupancy (Phase 4d) ─────────────────────────────────────────
+# With at most j untrusted docs in the top k, the soft certificate above is beside the
+# point: one echo poison usually wins an untrusted slot. What BO-j certifies instead is
+# the trusted side. Poisons never change a trusted doc's score (the penalty and the
+# norm cap touch untrusted docs only), at most j slots go to untrusted docs, and the
+# slots are filled best-first, so the trusted top-(k - j) is ALWAYS in the result --
+# for any poison text and any number of poisons. Dense-only: under hybrid fusion a
+# poison rescales the min-max normalized scores and can reorder trusted docs.
+
+def certified_trusted_ids(base_scores: np.ndarray, trusted: np.ndarray,
+                          k: int, j: int) -> np.ndarray:
+    """Indices (into base_scores) of the trusted docs that BO-j always keeps.
+
+    base_scores : (n,) raw honest scores e_d . q, AFTER any norm cap
+    trusted     : (n,) bool, True for docs with trust 1
+    """
+    idx = np.flatnonzero(trusted)
+    n_keep = max(k - j, 0)
+    if n_keep == 0 or len(idx) == 0:
+        return idx[:0]
+    return idx[np.argsort(-base_scores[idx])[:n_keep]]

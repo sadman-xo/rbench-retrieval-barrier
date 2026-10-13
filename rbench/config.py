@@ -48,6 +48,12 @@ class RetrievalConfig:
     # the trusted docs' norms. Fitted at index_base() time. None = off.
     norm_cap_pct: float | None = None
 
+    # --- bounded occupancy (Phase 4d) ---
+    # At most this many untrusted docs (trust < 1) in the top_k; trusted docs fill the
+    # other slots. Applied after the provenance penalty, so it composes with beta.
+    # None = off; 0 = hard exclusion of untrusted docs.
+    max_untrusted: int | None = None
+
     # --- runtime ---
     device: str = "cpu"
     normalize_embeddings: bool = True   # cosine similarity via dot product on unit vectors

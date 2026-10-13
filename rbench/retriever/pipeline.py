@@ -234,9 +234,31 @@ class RetrievalPipeline:
                 scores = np.asarray(self._get_reranker().predict(pairs), dtype=np.float32)
 
         adj = self._apply_defense(cand, scores, docs)
-        order = np.argsort(-adj)[: self.cfg.top_k]
+        order = self._fill_top_k(np.argsort(-adj), cand, docs)
         sel = cand[order]
         return RetrievalResult(query_id, [ids[i] for i in sel], [float(adj[o]) for o in order])
+
+    # ---- bounded occupancy (Phase 4d) -----------------------------------
+    # The soft penalty has no middle ground on SciFact (Phase 4c): either the poison
+    # gets in, or no external evidence does. A slot quota bounds the damage instead:
+    # at most j untrusted docs in the top k, whatever their scores. Trusted scores do
+    # not depend on the poison, so the trusted top-(k - j) is always kept
+    # (rbench/defense/certify.py: certified_trusted_ids).
+    def _fill_top_k(self, order: np.ndarray, cand: np.ndarray, docs) -> np.ndarray:
+        """Best-first top_k over `order`, with at most cfg.max_untrusted untrusted docs."""
+        j = self.cfg.max_untrusted
+        if j is None:
+            return order[: self.cfg.top_k]
+        keep, n_untrusted = [], 0
+        for o in order:
+            if self._trust(docs[cand[o]]) < 1.0:
+                if n_untrusted >= j:
+                    continue
+                n_untrusted += 1
+            keep.append(o)
+            if len(keep) == self.cfg.top_k:
+                break
+        return np.asarray(keep, dtype=int)
 
     def search_base(self, query_id: str, query_text: str) -> RetrievalResult:
         """Honest retrieval over the base corpus only (no poison)."""
@@ -245,9 +267,17 @@ class RetrievalPipeline:
 
     def search_with_extra(self, query_id: str, query_text: str, extra: Doc) -> RetrievalResult:
         """Retrieval over base corpus + one extra (poison) doc, reusing cached base embeddings."""
-        extra_emb = self._cap_norms(self.embedder.encode_one(extra.text)[None, :], [extra])
+        return self.search_with_extras(query_id, query_text, [extra])
+
+    def search_with_extras(self, query_id: str, query_text: str,
+                           extras: list[Doc]) -> RetrievalResult:
+        """Retrieval over base corpus + several extra (poison) docs (Phase 4d saturation)."""
+        if not extras:
+            return self.search_base(query_id, query_text)
+        extra_emb = self._cap_norms(self.embedder.encode([d.text for d in extras]), extras)
         emb = np.vstack([self._base_emb, extra_emb])
-        ids = self._base_ids + [extra.doc_id]
-        docs = self._base_docs + [extra]
-        tokens = (self._base_tokens + [extra.text.lower().split()]) if self.cfg.hybrid else None
+        ids = self._base_ids + [d.doc_id for d in extras]
+        docs = self._base_docs + list(extras)
+        tokens = ((self._base_tokens + [d.text.lower().split() for d in extras])
+                  if self.cfg.hybrid else None)
         return self._rank_view(query_id, query_text, emb, ids, docs, tokens)

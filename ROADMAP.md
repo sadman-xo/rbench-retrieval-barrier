@@ -206,12 +206,12 @@ Certified share (cap ON): Contriever dot 4% @β=0.5, **99% @β=0.75**; TAS-B dot
 **Adaptive attacker.** BO uses only ranks, and G1/G2 hold for any text, so a BO-aware attacker has nothing extra to exploit; its best response is still "maximize the raw score". Run echo+adaptive as a sanity row, not as a separate study.
 
 **Code plan.**
-- [ ] `config.py`: `max_untrusted: int | None = None`.
-- [ ] `pipeline._rank_view`: quota-aware top-k fill after `_apply_defense`. `search_with_extras(query_id, text, extras: list[Doc])`; keep `search_with_extra` as a 1-doc wrapper.
-- [ ] `defense/certify.py`: `certified_trusted_ids(base_scores, trusted, k, j)` → the trusted top-(k − j).
+- [x] `config.py`: `max_untrusted: int | None = None`.
+- [x] `pipeline._rank_view`: quota-aware top-k fill after `_apply_defense`. `search_with_extras(query_id, text, extras: list[Doc])`; keep `search_with_extra` as a 1-doc wrapper.
+- [x] `defense/certify.py`: `certified_trusted_ids(base_scores, trusted, k, j)` → the trusted top-(k − j).
 - [ ] `attack/multi.py`: m distinct echo+CEM poisons per query (seed + i; reject duplicate texts — identical copies are trivial to dedupe, so a fair attacker sends distinct ones).
 - [ ] `attack/run_occupancy.py`: E1–E3 on the (β, j) grid via `with_config()`, `--triggers-from` to reuse run-2 triggers, JSON to `results/phase4d_occupancy_*.json`.
-- [ ] `tests/test_occupancy.py` (fake embedders): `j=None` matches the old ranking exactly; G1 and G2 hold against adversarial poisons; `j=0` gives ext_recall 0.
+- [x] `tests/test_occupancy.py` (fake embedders): `j=None` matches the old ranking exactly; G1 and G2 hold against adversarial poisons; `j=0` gives ext_recall 0. 9 tests; 20/20 suite passes; a deliberately broken quota fails 5 of them.
 - [ ] `rbench/llm/` (E4): prompt builder, canary detector, a thin generator wrapper (HF `transformers`, fp16, batched, greedy). `rbench/eval/run_isr.py`: E4(a) controlled curve + E4(b) end-to-end from the E3 JSON. Tests with a fake LLM (no downloads).
 - [ ] Colab cell "Phase 4d". Copy result JSONs to Drive this time (run-2 JSONs live only on the Colab VM).
 
