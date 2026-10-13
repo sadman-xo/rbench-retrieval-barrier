@@ -6,6 +6,8 @@
   * G2: the trusted top-(k - j) is always kept, for any poisons (certified_trusted_ids)
   * "at most", not "exactly": weak external docs get no reserved slots
   * j = 0 is hard exclusion
+  * the multi-poison attacker gives m distinct poisons; poison #1 = the echo+static one
+  * run_occupancy.main() runs end to end on the toy corpus (dot and cosine)
 """
 from __future__ import annotations
 
@@ -16,7 +18,7 @@ from rbench.config import RetrievalConfig
 from rbench.defense.certify import certified_trusted_ids
 from rbench.retriever import Doc
 
-from test_norm_defense import K, make_docs, pipe_for
+from test_norm_defense import BagOfWordsEmbedder, FakeTokenizer, K, make_docs, pipe_for
 
 
 def scenario(rng, normalize: bool, n: int = 40, dim: int = 6):
@@ -132,6 +134,69 @@ def test_j_zero_is_hard_exclusion():
     trusted_ids = {d.doc_id for d in docs if d.provenance == "internal"}
     for res in (pipe.search_base("q", "q"), pipe.search_with_extras("q", "q", poisons)):
         assert set(res.ranked_ids) <= trusted_ids
+
+
+def test_canary_payload_helpers():
+    from rbench.attack.payload import CANARY, CANARY_PAYLOAD, obeyed, poison_text
+
+    assert poison_text("what is x") == f"what is x. {CANARY_PAYLOAD}"
+    assert obeyed(f"Vitamin D helps. {CANARY.lower()}") and not obeyed("Vitamin D helps.")
+
+
+# ── the multi-poison attacker ────────────────────────────────────────────
+def test_echo_poison_set_is_distinct_and_starts_with_echo_attacker():
+    pytest.importorskip("torch")
+    from rbench.attack.cem import CEMConfig
+    from rbench.attack.echo import optimize_echo_suffix
+    from rbench.attack.multi import echo_poison_set
+
+    tok = FakeTokenizer(["good", "bad", "filler", "more", "words", "here"])
+    cfg = CEMConfig(trigger_len=3, n_iters=4, n_samples=16, seed=0)
+
+    def rewards_good(cands):
+        return np.array([c.split().count("good") for c in cands], dtype=float)
+
+    trigs = echo_poison_set(tok, rewards_good, "what is x", 4, cfg)
+    assert len(trigs) == 4 and len(set(trigs)) == 4
+    assert all(t.startswith("what is x") for t in trigs)
+    assert trigs[0] == optimize_echo_suffix(tok, rewards_good, "what is x", cfg)[0]
+
+
+# ── end to end: run_occupancy.main() on the toy corpus with a fake model ─
+@pytest.mark.parametrize("normalize", [False, True])
+def test_run_occupancy_end_to_end_on_toy(monkeypatch, tmp_path, normalize):
+    pytest.importorskip("torch")
+    import json
+    import sys
+
+    from rbench.attack import run_occupancy
+
+    monkeypatch.setattr(run_occupancy, "Embedder", BagOfWordsEmbedder)
+    monkeypatch.setattr(run_occupancy, "RESULTS_DIR", tmp_path)
+    argv = ["run_occupancy", "--dataset", "toy", "--device", "cpu", "--iters", "3",
+            "--samples", "8", "--trigger-len", "4", "--embedder", "fake/bow",
+            "--ms", "1,3", "--js", "off,0,1,2"]
+    if normalize:
+        argv.append("--normalize")
+    monkeypatch.setattr(sys, "argv", argv)
+    run_occupancy.main()
+
+    out = json.loads((tmp_path / f"phase4d_occupancy_toy_bow_"
+                      f"{'cosine' if normalize else 'dot'}.json").read_text())
+    assert out["violations"] == []
+    assert set(out["attacks"]) == {"none", "naive", "echo+adaptive", "echo x1", "echo x3"}
+    assert len(out["utility"]) == 4 * 4                  # betas 0..0.75 x j off,0,1,2
+    for cell, row in out["attacks"]["echo x3"].items():
+        j = cell.split("j=")[1]
+        if j != "off":
+            assert row["occupancy"] <= int(j)            # G1, as reported
+        if j == "0":                                     # poisons excluded: nothing changes
+            assert row["trusted_recall"] == out["attacks"]["none"][cell]["trusted_recall"]
+    assert all(r["rsr"] == 0 for r in out["attacks"]["none"].values())
+    assert out["utility"]["beta=0,j=0"]["ext_recall"] == 0.0
+    qid = out["test_query_ids"][0]
+    assert len(out["poisons"]["echo x3"][qid]) == 3
+    assert set(out["ranked"]) == {"echo x1", "echo x3", "none"}
 
 
 def test_certified_trusted_ids_edges():

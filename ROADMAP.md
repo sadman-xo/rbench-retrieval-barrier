@@ -174,7 +174,7 @@ Certified share (cap ON): Contriever dot 4% @β=0.5, **99% @β=0.75**; TAS-B dot
 | | Question | Grid | Attack cost |
 |---|---|---|---|
 | **E1 — utility frontier** | Does BO keep external evidence where β cannot? | j ∈ {off, 0, 1, 2, 3} × β ∈ {0, 0.25, 0.5, 0.75}, no attack, all 300 queries | none |
-| **E2 — single poison** | What does BO cost/give against one optimized poison? | same grid; attackers naive, echo+static, echo+adaptive, static CEM | reuse run-2 triggers if the JSON is on Drive (`--triggers-from`), else re-optimize |
+| **E2 — single poison** | What does BO cost/give against one optimized poison? | same grid; attackers naive, echo+static (= poison #1 of E3), echo+adaptive (sanity row). Static CEM dropped: run 2 showed it is dominated (0% at β ≥ 0.5) | 1 extra CEM per query (echo+adaptive); re-optimized because the payload is now the canary |
 | **E3 — saturation (main)** | Can m poisons take over the context? | m ∈ {1, 2, 3, 5} poisons per query × j ∈ {off, 1, 2} × β ∈ {0, 0.25, 0.5, 0.75} | m × echo+CEM per test query (distinct seeds, distinct texts) |
 | **E4 — LLM obedience (IPI)** | Does the LLM obey the poison less often when fewer poisons are in the top k? | (a) controlled: n ∈ {0..5} poisons in a 5-doc context; (b) end-to-end: the real top 5 from key E3 cells | LLM generations only; no new CEM |
 
@@ -209,8 +209,8 @@ Certified share (cap ON): Contriever dot 4% @β=0.5, **99% @β=0.75**; TAS-B dot
 - [x] `config.py`: `max_untrusted: int | None = None`.
 - [x] `pipeline._rank_view`: quota-aware top-k fill after `_apply_defense`. `search_with_extras(query_id, text, extras: list[Doc])`; keep `search_with_extra` as a 1-doc wrapper.
 - [x] `defense/certify.py`: `certified_trusted_ids(base_scores, trusted, k, j)` → the trusted top-(k − j).
-- [ ] `attack/multi.py`: m distinct echo+CEM poisons per query (seed + i; reject duplicate texts — identical copies are trivial to dedupe, so a fair attacker sends distinct ones).
-- [ ] `attack/run_occupancy.py`: E1–E3 on the (β, j) grid via `with_config()`, `--triggers-from` to reuse run-2 triggers, JSON to `results/phase4d_occupancy_*.json`.
+- [x] `attack/multi.py`: m distinct echo+CEM poisons per query (identical copies are trivial to dedupe, so a fair attacker sends distinct ones). Poison #1 = the 4c echo+static trigger. A new seed alone is NOT enough — with one clear optimum CEM converges to the same suffix from every seed (a test caught this) — so poison i gets a suffix of trigger_len + i tokens, plus a re-draw on a repeat. `attack/payload.py`: the canary payload, shared with E4.
+- [x] `attack/run_occupancy.py`: E1–E3 on the (β, j) grid via `with_config()`; G1/G2 checked on every attacked search; JSON to `results/phase4d_occupancy_*.json` with the poison texts and every top-k list E4 needs. (`--triggers-from` dropped: the canary payload changes the poison, and the run-2 JSONs were never copied off the Colab VM.) The no-attack baseline is measured on the SAME test queries as the attacks (an early version compared all-query vs. test-query numbers; the j = 0 invariant caught it).
 - [x] `tests/test_occupancy.py` (fake embedders): `j=None` matches the old ranking exactly; G1 and G2 hold against adversarial poisons; `j=0` gives ext_recall 0. 9 tests; 20/20 suite passes; a deliberately broken quota fails 5 of them.
 - [ ] `rbench/llm/` (E4): prompt builder, canary detector, a thin generator wrapper (HF `transformers`, fp16, batched, greedy). `rbench/eval/run_isr.py`: E4(a) controlled curve + E4(b) end-to-end from the E3 JSON. Tests with a fake LLM (no downloads).
 - [ ] Colab cell "Phase 4d". Copy result JSONs to Drive this time (run-2 JSONs live only on the Colab VM).
