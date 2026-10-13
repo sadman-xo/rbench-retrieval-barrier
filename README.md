@@ -136,11 +136,3 @@ data/toy_corpus.json   # synthetic lab corpus (all content fabricated; inert poi
 results/               # experiment outputs (JSON per phase); git-ignored, saved to Drive
 slides/                # Beamer progress deck (compile on Overleaf/Colab)
 ```
-
-## Ethics / scope
-
-Defensive security research on a published paper, for a course. Data: a synthetic toy
-corpus and the public BEIR SciFact benchmark (downloaded at run time, not stored here).
-The bundled poison document carries an inert placeholder payload. No weaponizable
-payloads are included in this repo. Phase 4d measures LLM obedience with a harmless
-canary instruction only ("end your reply with the exact word CANARY-42").
