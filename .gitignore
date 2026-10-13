@@ -1,24 +1,24 @@
+# NOTE: git has no end-of-line comments -- keep every comment on its own line.
+
+# --- local only: never on GitHub ---
+# reading notes, deck, gap analysis (kept on the laptop)
+docs/
+# third-party paper PDFs
+papers/
+
 # --- python ---
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+.pytest_cache/
 .ipynb_checkpoints/
 
-# --- model / data caches (never commit; re-downloaded on the runtime) ---
+# --- model / data caches (re-downloaded on the runtime) ---
 .cache/
 *.faiss
-data/beir/          # downloaded BEIR datasets
+data/beir/
 
-# --- experiment outputs: keep the folder, ignore bulky run files ---
+# --- experiment outputs: keep the folder, ignore run files (copied to Drive from Colab) ---
 results/*
 !results/.gitkeep
-
-# --- pre-existing project scratch ---
-papers/
-report/
-.md/
-.pytest_cache/
-agent_c/__pycache__
-demo/__pycache__
-tests/__pycache__
