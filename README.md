@@ -48,11 +48,16 @@ Authors: Sadman Bin Tareq, Rageeb Hasan Shafee.
       external recall is 0 (hard exclusion) and overall recall drops 0.745→0.483.
       Negative result for the norm-cap idea; motivates bounded occupancy. See ROADMAP.md.
       Run: `python -m rbench.attack.run_norm --dataset scifact --max-queries 300 --device auto`
-- [~] **Phase 4d — bounded occupancy (BO-j) + LLM obedience test**: at most j
+- [x] **Phase 4d — bounded occupancy (BO-j) + LLM obedience test**: at most j
       untrusted docs in the top k. Guarantees (dense-only, any poisons): at most j
-      poisons get in (G1), and the trusted top-(k-j) is always kept (G2). It does NOT
-      keep one echo poison out, so E4 asks a small LLM whether fewer poisons means
-      less obedience (harmless CANARY-42 payload). Code + tests done; SciFact run pending.
+      poisons get in (G1), and the trusted top-(k-j) is always kept (G2).
+      SciFact run (2026-10-15, 90 test queries, no G1/G2 violations): at β=0, j=1–2
+      keeps **external recall 0.61–0.71** (every β≥0.5 gives 0), caps 3–5 poisons at
+      j slots with **0% poison majority** (no BO, β≤0.25: 99–100%), and keeps trusted
+      recall at 0.65–0.71 (no BO, β=0: 0.000). But **one poison is enough** for the
+      LLM: Qwen2.5-3B obeys a single injected CANARY-42 instruction **99%** of the
+      time (ISR(3)=100%, ISR(0)=0%), and ISR tracks RSR. BO-j bounds saturation, not
+      single-document IPI. See ROADMAP.md.
       Run: `python -m rbench.attack.run_occupancy --dataset scifact --max-queries 300 --device auto`
       then `python -m rbench.eval.run_isr --results results/phase4d_occupancy_scifact_contriever-msmarco_dot.json --device auto`
 - [ ] Phase 5 — learned trust, transferability, writeup.

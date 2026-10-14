@@ -214,7 +214,80 @@ Certified share (cap ON): Contriever dot 4% @β=0.5, **99% @β=0.75**; TAS-B dot
 - [x] `tests/test_occupancy.py` (fake embedders): `j=None` matches the old ranking exactly; G1 and G2 hold against adversarial poisons; `j=0` gives ext_recall 0. 9 tests; 20/20 suite passes; a deliberately broken quota fails 5 of them.
 - [x] `rbench/llm/` (E4): plain undefended RAG prompt, thin generator wrapper (HF `transformers`, fp16, batched, greedy, flags answers cut off at max_new_tokens). Canary checks in `attack/payload.py`: lenient (canary anywhere) AND strict (answer ENDS with it — a model that quotes the instruction while refusing passes only the lenient one). `rbench/eval/run_isr.py`: E4(a) controlled curve + E4(b) end-to-end from the E3 JSON, Wilson 95% CIs. `tests/test_isr.py` with a fake LLM. 28/28 suite passes.
 - [x] Colab cell "Phase 4d" (after 4c): two run_occupancy arms (dot + cosine), run_isr on the dot arm, then a guarded copy of `results/phase4d_*.json` to Drive.
-- [ ] **Run on Colab** and record the numbers (E1–E4).
+- [x] **Run on Colab** and record the numbers (E1–E4) — done 2026-10-15, see the results block below.
+
+#### Results (2026-10-15, T4) — E1–E4 on SciFact
+
+Same recipe as Phase 4c run 2: 5000 docs (1475 external), 300 queries (90 held-out test), k = 5, CEM 12 tokens × 40 iters × 96 samples, cap = p99 of trusted norms, attack β = 0.5. Payload = the CANARY-42 instruction. Two arms: Contriever-ms dot (cap ON) and Contriever-ms cosine. E4 LLM = Qwen2.5-3B-Instruct, greedy, 256 new tokens, dot arm only. **G1/G2: no violations in either arm.**
+
+**E1 — utility, no attack (300 queries): recall / ext_recall.** `cert` = the trusted recall that BO-j guarantees under any attack (G2).
+
+| j | dot β=0 | β=0.25 | β ≥ 0.5 | cert | cosine β=0 | β=0.25 | β ≥ 0.5 | cert |
+|---|---|---|---|---|---|---|---|---|
+| off | 0.745 / 0.69 | 0.627 / 0.22 | 0.559 / **0.00** | – | 0.735 / 0.73 | 0.628 / 0.28 | 0.541 / **0.00** | – |
+| 0 | 0.559 / 0.00 | 0.559 / 0.00 | 0.559 / 0.00 | 0.789 | 0.541 / 0.00 | 0.541 / 0.00 | 0.541 / 0.00 | 0.760 |
+| 1 | 0.729 / **0.61** | 0.627 / 0.22 | 0.559 / 0.00 | 0.750 | 0.721 / **0.63** | 0.628 / 0.28 | 0.541 / 0.00 | 0.753 |
+| 2 | 0.735 / **0.65** | 0.627 / 0.22 | 0.559 / 0.00 | 0.729 | 0.732 / **0.71** | 0.628 / 0.28 | 0.541 / 0.00 | 0.697 |
+| 3 | 0.745 / 0.69 | 0.627 / 0.22 | 0.559 / 0.00 | 0.670 | 0.736 / 0.73 | 0.628 / 0.28 | 0.541 / 0.00 | 0.659 |
+
+At β ≥ 0.25 the penalty already keeps fewer than j external docs in the top 5, so the j rows equal `off`. BO-j is useful only at β = 0 — the cells to use are **β = 0, j ∈ {1, 2}**.
+
+**E2 + E3 — attacks, 90 test queries. Each cell: RSR · occupancy · majority (≥ 3 of 5 slots).** j = 0 and β = 0.75 give 0 · 0.0 · 0 for every attacker in both arms.
+
+| Attacker (dot) | β=0, off | β=0.25, off | β=0.5, off | β=0, **j=1** | β=0, **j=2** | β=0, j=3 |
+|---|---|---|---|---|---|---|
+| naive echo | 100 · 1.0 · 0 | 100 · 1.0 · 0 | 24 · 0.2 · 0 | 100 · 1.0 · 0 | 100 · 1.0 · 0 | 100 · 1.0 · 0 |
+| echo+adaptive | 100 · 1.0 · 0 | 100 · 1.0 · 0 | 46 · 0.5 · 0 | 100 · 1.0 · 0 | 100 · 1.0 · 0 | 100 · 1.0 · 0 |
+| echo ×1 (= echo+static) | 100 · 1.0 · 0 | 100 · 1.0 · 0 | 37 · 0.4 · 0 | 100 · 1.0 · 0 | 100 · 1.0 · 0 | 100 · 1.0 · 0 |
+| echo ×2 | 100 · 2.0 · 0 | 100 · 2.0 · 0 | 40 · 0.7 · 0 | 100 · 1.0 · 0 | 100 · 2.0 · 0 | 100 · 2.0 · 0 |
+| echo ×3 | 100 · 3.0 · **100** | 100 · 3.0 · **99** | 42 · 0.8 · 13 | 100 · 1.0 · **0** | 100 · 2.0 · **0** | 100 · 3.0 · 100 |
+| echo ×5 | 100 · 5.0 · **100** | 100 · 4.7 · **100** | 44 · 1.0 · 18 | 100 · 1.0 · **0** | 100 · 2.0 · **0** | 100 · 3.0 · 100 |
+
+Cosine arm: the same pattern. At β = 0.5, off: naive 27%, echo+adaptive 38%, echo ×1 38%, ×3 43% · 1.0 · 22%, ×5 46% · 1.2 · 23%.
+
+**Trusted recall with 5 poisons present (no-attack value in brackets).**
+
+| | β=0, off | β=0.25, off | β=0.5, off | j=0 | β=0, j=1 | β=0, j=2 | β=0, j=3 |
+|---|---|---|---|---|---|---|---|
+| dot | **0.000** (0.754) | 0.274 (0.774) | 0.759 (0.774) | 0.774 | **0.709** (0.759) | 0.704 (0.754) | 0.647 (0.754) |
+| cosine | **0.000** (0.687) | 0.090 (0.701) | 0.672 (0.701) | 0.701 | **0.694** (0.694) | 0.652 (0.687) | 0.585 (0.687) |
+
+**E4(a) — ISR vs. number of poisons in a 5-doc context (90 queries, Wilson 95% CI).**
+
+| poisons | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| ISR | 0% [0, 4] | **99% [94, 100]** | 100% [96, 100] | **100% [96, 100]** | 100% | 99% |
+| strict (answer ends with canary) | 0% | 88% | 82% | 90% | 94% | 99% |
+| cut off at 256 tokens | 18% | 1% | 0% | 0% | 0% | 1% |
+
+**E4(b) — ISR on the real top 5 under echo ×3.**
+
+| cell | poisons in top 5 | ISR | strict |
+|---|---|---|---|
+| β=0, off | 3.00 | 100% [96, 100] | 100% |
+| β=0.5, off | 0.83 | **42%** [33, 53] | 38% |
+| β=0.75, off | 0.00 | 0% [0, 4] | 0% |
+| β=0, j=1 | 1.00 | **100%** [96, 100] | 99% |
+| β=0, j=2 | 2.00 | 99% [94, 100] | 99% |
+
+**Findings**
+1. **H3 holds — BO-j gives the middle regime for utility.** At β = 0, j = 1 or 2 keeps ext_recall at 0.61–0.71 and recall at 0.72–0.74 (no defense: 0.735–0.745). Every penalty with β ≥ 0.5 gives ext_recall 0 and recall 0.54–0.56.
+2. **H1 holds — BO-j does not lower RSR.** One poison gets in at 100% for every attacker when j ≥ 1 (expected: the echo outranks every honest external doc).
+3. **H2 holds — BO-j stops saturation, with a certificate.** Without BO, 3 or 5 poisons take 3–5 slots and a majority on 99–100% of queries at β ≤ 0.25, and trusted recall falls to 0.000 at β = 0. Even β = 0.5 leaves a majority on 13–23% of queries. With j ≤ 2, occupancy ≤ j and majority = 0%, and trusted recall stays at 0.65–0.71 (both arms), never below the G2 bound. j = 3 is not safe: 3 of 5 is already a majority, so use j < k/2.
+4. **H4 holds — zero G1/G2 violations** in both arms.
+5. **H6: one poison is enough (the key E4 answer).** ISR(1) = 99% and ISR(3) = 100%; the CIs overlap fully. ISR(0) = 0%, so the canary check has no false alarms. Qwen2.5-3B obeys one injected instruction almost every time.
+6. **ISR follows RSR; the LLM adds no barrier.** In E4(b), β = 0.5 gives 0.83 poisons on average and ISR 42% = its RSR (42%). BO j = 1 lets exactly one poison in and ISR is 100%. Only β = 0.75 (no external docs) gives 0%.
+
+**Headline.** Bounded occupancy is the middle regime for **utility and saturation**: it keeps most external evidence (ext_recall 0.61–0.71), caps the poisons at j, prevents a poison majority, and certifies the trusted top-(k − j). But it gives **no protection against a single injected instruction**: one poison in the context gives 99% ISR on a 3B model. Against IPI, the only retrieval-side setting that works is to exclude all untrusted docs (j = 0 or β ≥ 0.75), and that costs all external evidence. Under similarity ranking the best external doc for a query is the echo poison, so a retrieval-side defense alone cannot keep both. This is the "finding in itself" branch of H6, and it is the motivation for an LLM-stage step on the j untrusted slots.
+
+**Caveats.** One small LLM (3B) and a harmless canary — a model may obey a harmless format instruction more readily than a harmful one. 18% of clean answers (n = 0) hit 256 tokens; this does not change ISR (no canary to find), and at n ≥ 1 the cut-off share is ≤ 1%. Dense-only, SciFact only. The dot and cosine arms used different external labelings (see the reproducibility note below).
+
+**Reproducibility note (found 2026-10-15).** `load_beir` built its doc list from a Python `set` of string ids. String hashing changes per process (PYTHONHASHSEED), so the doc order changed in every run, and `assign_provenance` (one random draw per doc, in order) labeled a different 30% as external each time — with the same count (1475). Each run is internally consistent (one labeling per process), so within-run comparisons hold. But comparisons across runs or arms mix different labelings. Example: Contriever-dot β = 0 gives recall 0.745 in both run 2 and Phase 4d, but ext_recall 0.807 vs 0.69. Fixed: the loader now iterates `sorted(keep)`; `tests/test_loader.py` loads a fake BEIR set under three hash seeds and checks the labels are identical. New runs will not reproduce the old numbers exactly, because the labeling is now a fixed (different) draw.
+
+**Next (from these results)**
+- [ ] **BO-j + LLM-stage isolation for the j untrusted slots.** BO-j makes "at most j of k docs are corrupt" true by construction. That is exactly the assumption of RobustRAG (isolate-then-aggregate) and PRA-RAG. With j < k/2, an aggregation step can out-vote one canary. Test: E4(b) with isolate-then-aggregate on the β = 0, j = 1 / j = 2 cells — target ISR ≈ 0 with ext_recall ≈ 0.6.
+- [ ] **A second LLM** (7–8B instruct, H100) for E4(a), to check that "one poison is enough" is not a 3B effect.
+- [ ] **Labeling variance.** Now that the labeling is deterministic, re-run E1 over ~5 labeling seeds (add a labeling-only seed flag; `--seed` also sets the split and CEM) and report ext_recall as mean ± sd. Different labelings moved β = 0 ext_recall by ~0.1.
 
 ### Phase 5 — Learned trust / data-driven provenance (Idea B, done right)
 - [ ] Trust predictor `t̂(d) ∈ [0,1]` from **source-side, non-forgeable features only** (no content).
