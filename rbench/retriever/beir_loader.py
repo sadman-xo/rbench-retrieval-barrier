@@ -109,7 +109,10 @@ def load_beir(
     elif not max_docs:
         keep |= set(others)
 
-    docs = [Doc(doc_id=x, text=all_docs[x], provenance="internal") for x in keep if all_docs[x]]
+    # sorted: set order of string ids changes per process (PYTHONHASHSEED), and the doc
+    # order fixes which docs assign_provenance labels 'external'
+    docs = [Doc(doc_id=x, text=all_docs[x], provenance="internal")
+            for x in sorted(keep) if all_docs[x]]
     kept_ids = {dd.doc_id for dd in docs}
     queries = [
         Query(query_id=qid, text=q_text[qid],
