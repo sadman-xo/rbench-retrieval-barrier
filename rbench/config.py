@@ -5,12 +5,15 @@ on lives here, so all experiments report comparable numbers.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
-RESULTS_DIR = ROOT / "results"
+# RBENCH_RESULTS_DIR lets Colab write each JSON straight to Drive, so a runtime
+# disconnect cannot lose results that were already saved.
+RESULTS_DIR = Path(os.environ.get("RBENCH_RESULTS_DIR") or ROOT / "results")
 
 
 @dataclass
