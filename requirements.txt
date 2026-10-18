@@ -3,10 +3,7 @@
 sentence-transformers>=2.7,<4      # embedders + CrossEncoder reranker (pulls torch, transformers)
 # transformers (pulled in above) also runs the Phase 4d E4 LLM in rbench/llm
 rank-bm25>=0.2.2                    # sparse retrieval for the hybrid path
-numpy>=1.26
-# faiss-cpu is optional: the dense index falls back to numpy brute-force if it is missing.
-# On Windows, `pip install faiss-cpu` usually works; if it fails, the fallback keeps Phase 1 running.
-faiss-cpu>=1.8 ; platform_system != "Darwin" or platform_machine != "arm64"
+numpy>=1.26                        # the dense index is an exact numpy inner-product search
 
 # --- real datasets (Phase 2 on BEIR: SciFact / NFCorpus / FiQA) ---
 # BEIR is fetched directly from the official zip host via stdlib (see

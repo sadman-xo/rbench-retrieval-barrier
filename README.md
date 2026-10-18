@@ -70,8 +70,8 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-`faiss-cpu` is optional — the dense index falls back to a numpy brute-force search if it
-is not installed, so Phase 1 runs either way.
+The dense index is an exact NumPy inner-product search, so Phase 1 needs no extra
+native dependency.
 
 ## Run the Phase 1 smoke test
 

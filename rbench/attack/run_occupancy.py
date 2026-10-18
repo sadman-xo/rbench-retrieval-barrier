@@ -160,7 +160,7 @@ def main() -> None:
     def utility(pipe, j) -> dict:
         rec, ext_rec, tr_rec, cert_rec = [], [], [], []
         for q in queries:
-            res = pipe.search_base(q.query_id, q.text)
+            res = pipe.search_base(q.query_id, q.text, q_vecs[q.query_id])
             rel = q.relevant_ids
             if not rel:
                 continue
@@ -236,7 +236,8 @@ def main() -> None:
         j = cell[1]
         hit, occ, maj, tr_rec = [], [], [], []
         for q in test_q:
-            res = pipe.search_with_extras(q.query_id, q.text, attacks[name][q.query_id])
+            res = pipe.search_with_extras(q.query_id, q.text, attacks[name][q.query_id],
+                                          q_vec=q_vecs[q.query_id])
             n_poison = sum(i.startswith("poison-") for i in res.ranked_ids)
             hit.append(n_poison > 0)
             occ.append(n_poison)

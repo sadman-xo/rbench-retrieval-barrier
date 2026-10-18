@@ -56,8 +56,8 @@ class RetrievalPipeline:
         self.docs: list[Doc] = []
         self._ids: list[str] = []
         self._emb: np.ndarray | None = None       # (n, dim) doc embeddings
-        self._faiss = None
         self._bm25 = None
+        self._bm25_tokens: list[list[str]] | None = None
         self._reranker = None
         # --- cached "base" corpus for incremental poison insertion (attack phases) ---
         self._base_docs: list[Doc] = []
@@ -65,6 +65,7 @@ class RetrievalPipeline:
         self._base_emb: np.ndarray | None = None       # after the norm cap (if any)
         self._base_emb_raw: np.ndarray | None = None   # as the embedder returned them
         self._base_tokens: list[list[str]] | None = None
+        self._base_bm25 = None                          # BM25 over the base corpus (hybrid only)
         self._norm_cap: float | None = None            # fitted untrusted-norm cap (Phase 4c)
 
     # ---- indexing -------------------------------------------------------
@@ -74,77 +75,49 @@ class RetrievalPipeline:
         texts = [d.text for d in self.docs]
 
         self._emb = self.embedder.encode(texts)
-        self._build_dense(self._emb)
         if self.cfg.hybrid:
             self._build_bm25(texts)
         return self
 
-    def _build_dense(self, emb: np.ndarray) -> None:
-        try:
-            import faiss  # optional
-
-            index = faiss.IndexFlatIP(emb.shape[1])  # inner product; unit vecs => cosine
-            index.add(emb)
-            self._faiss = index
-        except Exception:
-            self._faiss = None  # numpy brute-force fallback in _dense_scores
-
     def _build_bm25(self, texts: list[str]) -> None:
+        self._bm25_tokens = [t.lower().split() for t in texts]
+        self._bm25 = self._bm25_from(self._bm25_tokens)
+
+    @staticmethod
+    def _bm25_from(tokens: list[list[str]] | None):
+        """Build a BM25 index from pre-tokenized docs, once. None -> None (dense-only)."""
+        if tokens is None:
+            return None
         from rank_bm25 import BM25Okapi
 
-        self._bm25 = BM25Okapi([t.lower().split() for t in texts])
-
-    # ---- scoring --------------------------------------------------------
-    def _dense_scores(self, q_vec: np.ndarray) -> np.ndarray:
-        assert self._emb is not None, "call index() first"
-        return self._emb @ q_vec  # cosine for unit vectors
-
-    def _bm25_scores(self, query: str) -> np.ndarray:
-        return np.asarray(self._bm25.get_scores(query.lower().split()), dtype=np.float32)
+        return BM25Okapi(tokens)
 
     # ---- search ---------------------------------------------------------
-    def search(self, query_id: str, query_text: str) -> RetrievalResult:
-        q_vec = self.embedder.encode_one(query_text)
-        dense = self._dense_scores(q_vec)
+    def search(self, query_id: str, query_text: str,
+               q_vec: np.ndarray | None = None) -> RetrievalResult:
+        """Retrieval over the index() corpus, through the shared ranking core.
 
-        if not self.cfg.hybrid:
-            order = np.argsort(-dense)[: self.cfg.top_k]
-            return RetrievalResult(query_id, [self._ids[i] for i in order],
-                                   [float(dense[i]) for i in order])
-
-        # hybrid: fuse dense + bm25 into a candidate pool
-        bm25 = self._bm25_scores(query_text)
-        fused = (1 - self.cfg.bm25_weight) * _minmax(dense) + self.cfg.bm25_weight * _minmax(bm25)
-        pool = np.argsort(-fused)[: self.cfg.candidate_k]
-
-        if not self.cfg.rerank:
-            top = pool[: self.cfg.top_k]
-            return RetrievalResult(query_id, [self._ids[i] for i in top],
-                                   [float(fused[i]) for i in top])
-
-        # cross-encoder rerank over the candidate pool
-        from sentence_transformers import CrossEncoder
-
-        if not hasattr(self, "_reranker") or self._reranker is None:
-            self._reranker = CrossEncoder(self.cfg.reranker_name, device=self.cfg.device)
-        pairs = [(query_text, self.docs[i].text) for i in pool]
-        ce = np.asarray(self._reranker.predict(pairs), dtype=np.float32)
-        rerank_order = pool[np.argsort(-ce)][: self.cfg.top_k]
-        ce_by_pool = {int(p): float(s) for p, s in zip(pool, ce)}
-        return RetrievalResult(query_id, [self._ids[i] for i in rerank_order],
-                               [ce_by_pool[int(i)] for i in rerank_order])
+        Same ranking path as the attack phases (search_base / _rank_view). With the
+        default config (no provenance defense, no occupancy cap) this is plain
+        dense-only, or hybrid+rerank, retrieval. Pass a pre-encoded q_vec to skip
+        re-encoding the query.
+        """
+        assert self._emb is not None, "call index() first"
+        return self._rank_view(query_id, query_text, self._emb, self._ids, self.docs,
+                               self._bm25_tokens, q_vec=q_vec, bm25=self._bm25)
 
     # ---- incremental base + poison (attack phases) ----------------------
     # Embed the honest corpus ONCE, then evaluate many poison documents by only
     # embedding the single poison doc and stacking it on. Essential for large
     # (BEIR-scale) corpora, where re-indexing thousands of docs per trial is
-    # prohibitive. Uses numpy for dense scores (exact; identical to FAISS IP).
+    # prohibitive. Uses numpy for dense scores (exact inner product).
     def index_base(self, docs: list[Doc]) -> "RetrievalPipeline":
         self._base_docs = list(docs)
         self._base_ids = [d.doc_id for d in self._base_docs]
         self._base_emb_raw = self.embedder.encode([d.text for d in self._base_docs])
         self._base_tokens = ([d.text.lower().split() for d in self._base_docs]
                              if self.cfg.hybrid else None)
+        self._base_bm25 = self._bm25_from(self._base_tokens)
         self._fit_norm_cap()
         return self
 
@@ -159,6 +132,10 @@ class RetrievalPipeline:
         other._base_tokens = self._base_tokens
         if cfg.hybrid and other._base_tokens is None:
             other._base_tokens = [d.text.lower().split() for d in other._base_docs]
+        # same base corpus, so reuse the prebuilt BM25; only build when this view
+        # turns hybrid on over a base that was indexed dense-only.
+        other._base_bm25 = (other._bm25_from(other._base_tokens)
+                            if cfg.hybrid and self._base_bm25 is None else self._base_bm25)
         other._reranker = self._reranker
         other._fit_norm_cap()
         return other
@@ -214,17 +191,18 @@ class RetrievalPipeline:
              for i in cand], dtype=np.float32)
         return scores - penalty
 
-    def _rank_view(self, query_id, query_text, emb, ids, docs, tokens) -> RetrievalResult:
-        q_vec = self.embedder.encode_one(query_text)
+    def _rank_view(self, query_id, query_text, emb, ids, docs, tokens,
+                   q_vec=None, bm25=None) -> RetrievalResult:
+        q_vec = self.embedder.encode_one(query_text) if q_vec is None else q_vec
         dense = emb @ q_vec
 
         if not self.cfg.hybrid:
             cand = np.arange(len(ids))
             scores = dense.astype(np.float32)
         else:
-            from rank_bm25 import BM25Okapi
-
-            bm = np.asarray(BM25Okapi(tokens).get_scores(query_text.lower().split()), dtype=np.float32)
+            if bm25 is None:
+                bm25 = self._bm25_from(tokens)
+            bm = np.asarray(bm25.get_scores(query_text.lower().split()), dtype=np.float32)
             fused = (1 - self.cfg.bm25_weight) * _minmax(dense) + self.cfg.bm25_weight * _minmax(bm)
             cand = np.argsort(-fused)[: self.cfg.candidate_k]
             if not self.cfg.rerank:
@@ -260,24 +238,30 @@ class RetrievalPipeline:
                 break
         return np.asarray(keep, dtype=int)
 
-    def search_base(self, query_id: str, query_text: str) -> RetrievalResult:
+    def search_base(self, query_id: str, query_text: str,
+                    q_vec: np.ndarray | None = None) -> RetrievalResult:
         """Honest retrieval over the base corpus only (no poison)."""
         return self._rank_view(query_id, query_text, self._base_emb,
-                               self._base_ids, self._base_docs, self._base_tokens)
+                               self._base_ids, self._base_docs, self._base_tokens,
+                               q_vec=q_vec, bm25=self._base_bm25)
 
-    def search_with_extra(self, query_id: str, query_text: str, extra: Doc) -> RetrievalResult:
+    def search_with_extra(self, query_id: str, query_text: str, extra: Doc,
+                          q_vec: np.ndarray | None = None) -> RetrievalResult:
         """Retrieval over base corpus + one extra (poison) doc, reusing cached base embeddings."""
-        return self.search_with_extras(query_id, query_text, [extra])
+        return self.search_with_extras(query_id, query_text, [extra], q_vec=q_vec)
 
     def search_with_extras(self, query_id: str, query_text: str,
-                           extras: list[Doc]) -> RetrievalResult:
+                           extras: list[Doc],
+                           q_vec: np.ndarray | None = None) -> RetrievalResult:
         """Retrieval over base corpus + several extra (poison) docs (Phase 4d saturation)."""
         if not extras:
-            return self.search_base(query_id, query_text)
+            return self.search_base(query_id, query_text, q_vec=q_vec)
         extra_emb = self._cap_norms(self.embedder.encode([d.text for d in extras]), extras)
         emb = np.vstack([self._base_emb, extra_emb])
         ids = self._base_ids + [d.doc_id for d in extras]
         docs = self._base_docs + list(extras)
+        # hybrid adds the poison tokens, so the prebuilt base BM25 cannot be reused;
+        # _rank_view rebuilds from these tokens. dense-only ignores BM25 (tokens=None).
         tokens = ((self._base_tokens + [d.text.lower().split() for d in extras])
                   if self.cfg.hybrid else None)
-        return self._rank_view(query_id, query_text, emb, ids, docs, tokens)
+        return self._rank_view(query_id, query_text, emb, ids, docs, tokens, q_vec=q_vec)
