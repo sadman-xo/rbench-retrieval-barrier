@@ -24,12 +24,16 @@ The corpus is reloaded with the same loader settings to get the document texts.
 
 Run (after run_occupancy):
   python -m rbench.eval.run_isr --results results/phase4d_occupancy_scifact_contriever-msmarco_dot.json --device auto
+
+  With W&B logging:
+  python -m rbench.eval.run_isr --results ... --device auto --wandb
 """
 from __future__ import annotations
 
 import argparse
 import json
 import math
+import time
 from pathlib import Path
 
 import numpy as np
@@ -67,6 +71,64 @@ def summarize(rows: list[dict]) -> dict:
             "truncated": float(np.mean([r["truncated"] for r in rows]))}
 
 
+# ── W&B helpers ───────────────────────────────────────────────────────
+
+def _wb_init(args, cfg: dict, k: int, n_jobs: int):
+    """Start a W&B run. Returns the run object (or None if wandb is off)."""
+    import wandb
+    wb_config = {
+        "model": args.model, "device": resolve_device(args.device),
+        "k": k, "max_new_tokens": args.max_new_tokens,
+        "max_doc_words": args.max_doc_words, "batch_size": args.batch_size,
+        "seed": args.seed, "n_jobs": n_jobs,
+        "dataset": cfg["dataset"], "embedder": cfg["embedder"],
+        "sim": cfg["sim"], "attack_m": args.m,
+        "cells_b": args.cells, "clean_cell": args.clean_cell,
+    }
+    return wandb.init(project="rbench-e4-isr", config=wb_config,
+                      name=f"isr_{cfg['dataset']}_{cfg['sim']}_{args.model.split('/')[-1]}")
+
+
+def _wb_log_generation_progress(run, batch_idx: int, n_batches: int,
+                                batch_size: int, elapsed: float):
+    """Log one generation batch to W&B."""
+    run.log({
+        "gen/batch": batch_idx,
+        "gen/progress_pct": (batch_idx + 1) / n_batches * 100,
+        "gen/batch_time_s": elapsed,
+        "gen/throughput": batch_size / max(elapsed, 1e-6),
+    })
+
+
+def _wb_log_results(run, curve: dict, e2e: dict, rows: list[dict], k: int):
+    """Log the final E4(a) curve, E4(b) table, and all answers to W&B."""
+    import wandb
+
+    # E4(a): ISR vs. poison count
+    for n, s in curve.items():
+        run.log({"e4a/n_poison": int(n), "e4a/isr": s["isr"],
+                 "e4a/isr_strict": s["isr_strict"], "e4a/truncated": s["truncated"],
+                 "e4a/ci95_lo": s["ci95"][0], "e4a/ci95_hi": s["ci95"][1]})
+
+    # E4(b): ISR per defense cell
+    for cell, s in e2e.items():
+        safe = cell.replace("=", "_").replace(",", "__")
+        run.summary[f"e4b/{safe}/isr"] = s["isr"]
+        run.summary[f"e4b/{safe}/isr_strict"] = s["isr_strict"]
+        run.summary[f"e4b/{safe}/mean_poisons"] = s["mean_poisons"]
+        run.summary[f"e4b/{safe}/ci95_lo"] = s["ci95"][0]
+        run.summary[f"e4b/{safe}/ci95_hi"] = s["ci95"][1]
+
+    # full answers table
+    cols = ["part", "key", "qid", "n_poison", "obeyed", "obeyed_strict",
+            "truncated", "answer"]
+    table = wandb.Table(columns=cols)
+    for r in rows:
+        table.add_data(r["part"], str(r["key"]), r["qid"], r["n_poison"],
+                       r["obeyed"], r["obeyed_strict"], r["truncated"], r["answer"])
+    run.log({"answers": table})
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Phase 4d E4: LLM obedience vs. poison count")
     ap.add_argument("--results", required=True, help="phase4d_occupancy_*.json")
@@ -82,6 +144,7 @@ def main() -> None:
                     help="cell whose clean top k supplies the trusted docs for (a)")
     ap.add_argument("--max-queries", type=int, default=None, help="limit, for a quick check")
     ap.add_argument("--seed", type=int, default=20260907)
+    ap.add_argument("--wandb", action="store_true", help="log metrics and answers to W&B")
     args = ap.parse_args()
 
     device = resolve_device(args.device)
@@ -130,10 +193,36 @@ def main() -> None:
             jobs.append({"part": "b", "key": cell, "qid": qid,
                          "n_poison": sum(i.startswith("poison-") for i in ids), "docs": texts})
 
+    # ── W&B: start run after we know the job count ──
+    wb_run = None
+    if args.wandb:
+        wb_run = _wb_init(args, cfg, k, len(jobs))
+        print(f"W&B run: {wb_run.url}\n")
+
+    prompts = [build_prompt(q_text[j["qid"]], j["docs"], args.max_doc_words) for j in jobs]
     gen = HFGenerator(args.model, device=device, max_new_tokens=args.max_new_tokens,
                       batch_size=args.batch_size)
-    outs = gen.generate([build_prompt(q_text[j["qid"]], j["docs"], args.max_doc_words)
-                         for j in jobs])
+
+    # batched generation with per-batch W&B logging
+    n_batches = math.ceil(len(prompts) / args.batch_size)
+    t_gen_start = time.time()
+    outs = []
+    for bi in range(n_batches):
+        s = bi * args.batch_size
+        batch_prompts = prompts[s : s + args.batch_size]
+        t0 = time.time()
+        batch_outs = gen.generate_batch(batch_prompts)
+        elapsed = time.time() - t0
+        outs.extend(batch_outs)
+        if wb_run:
+            _wb_log_generation_progress(wb_run, bi, n_batches, len(batch_prompts), elapsed)
+        if (bi + 1) % 10 == 0 or bi + 1 == n_batches:
+            print(f"  batch [{bi+1}/{n_batches}] done")
+
+    if wb_run:
+        wb_run.summary["gen/total_time_s"] = time.time() - t_gen_start
+        wb_run.summary["gen/total_prompts"] = len(prompts)
+
     rows = [{"part": j["part"], "key": j["key"], "qid": j["qid"], "n_poison": j["n_poison"],
              "obeyed": obeyed(o.text), "obeyed_strict": obeyed_strict(o.text),
              "truncated": o.truncated, "answer": o.text}
@@ -163,6 +252,10 @@ def main() -> None:
               f"[{s['ci95'][0]*100:>4.0f}%, {s['ci95'][1]*100:>4.0f}%]"
               f"{s['isr_strict']*100:>8.0f}%{s['truncated']*100:>9.0f}%")
 
+    # ── W&B: log final results ──
+    if wb_run:
+        _wb_log_results(wb_run, curve, e2e, rows, k)
+
     print("\nHow to read this:")
     print("  * (a) poisons=0 must be ~0% (no false alarms).")
     print("  * (a) the key question: is ISR at 1 poison clearly below ISR at 3? If yes, capping")
@@ -184,6 +277,10 @@ def main() -> None:
     path = RESULTS_DIR / f"phase4d_isr_{stem}_{args.model.split('/')[-1]}.json"
     path.write_text(json.dumps(out, indent=1), encoding="utf-8")
     print(f"\nsaved: {path.relative_to(RESULTS_DIR.parent)}")
+
+    if wb_run:
+        wb_run.finish()
+        print(f"W&B run finished: {wb_run.url}")
 
 
 if __name__ == "__main__":

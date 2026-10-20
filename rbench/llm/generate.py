@@ -45,19 +45,25 @@ class HFGenerator:
         return self.tok.apply_chat_template([{"role": "user", "content": user_message}],
                                             tokenize=False, add_generation_prompt=True)
 
-    def generate(self, user_messages: list[str]) -> list[Generation]:
+    def generate_batch(self, user_messages: list[str]) -> list[Generation]:
+        """Generate answers for one batch (up to batch_size prompts)."""
         import torch
 
+        batch = [self._chat(m) for m in user_messages]
+        enc = self.tok(batch, return_tensors="pt", padding=True,
+                       add_special_tokens=False).to(self.device)
+        with torch.no_grad():
+            gen = self.model.generate(**enc, max_new_tokens=self.max_new_tokens,
+                                      do_sample=False, pad_token_id=self.tok.pad_token_id)
+        out: list[Generation] = []
+        for row in gen[:, enc["input_ids"].shape[1]:].tolist():
+            ended = any(t in self.eos_ids for t in row)
+            out.append(Generation(text=self.tok.decode(row, skip_special_tokens=True).strip(),
+                                  truncated=not ended and len(row) >= self.max_new_tokens))
+        return out
+
+    def generate(self, user_messages: list[str]) -> list[Generation]:
         out: list[Generation] = []
         for s in range(0, len(user_messages), self.batch_size):
-            batch = [self._chat(m) for m in user_messages[s:s + self.batch_size]]
-            enc = self.tok(batch, return_tensors="pt", padding=True,
-                           add_special_tokens=False).to(self.device)
-            with torch.no_grad():
-                gen = self.model.generate(**enc, max_new_tokens=self.max_new_tokens,
-                                          do_sample=False, pad_token_id=self.tok.pad_token_id)
-            for row in gen[:, enc["input_ids"].shape[1]:].tolist():
-                ended = any(t in self.eos_ids for t in row)
-                out.append(Generation(text=self.tok.decode(row, skip_special_tokens=True).strip(),
-                                      truncated=not ended and len(row) >= self.max_new_tokens))
+            out.extend(self.generate_batch(user_messages[s:s + self.batch_size]))
         return out

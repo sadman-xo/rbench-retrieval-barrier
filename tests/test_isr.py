@@ -44,7 +44,7 @@ class FakeGenerator:
     def __init__(self, model_name, device="cpu", max_new_tokens=256, batch_size=8):
         pass
 
-    def generate(self, user_messages):
+    def generate_batch(self, user_messages):
         out = []
         for m in user_messages:
             n = m.count(CANARY)
@@ -53,6 +53,9 @@ class FakeGenerator:
                     "Here is the answer.")
             out.append(Generation(text=text, truncated=False))
         return out
+
+    def generate(self, user_messages):
+        return self.generate_batch(user_messages)
 
 
 def test_run_isr_end_to_end_on_toy(monkeypatch, tmp_path):
