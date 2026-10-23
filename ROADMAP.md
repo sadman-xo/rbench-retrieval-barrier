@@ -284,10 +284,34 @@ Cosine arm: the same pattern. At β = 0.5, off: naive 27%, echo+adaptive 38%, ec
 
 **Reproducibility note (found 2026-10-15).** `load_beir` built its doc list from a Python `set` of string ids. String hashing changes per process (PYTHONHASHSEED), so the doc order changed in every run, and `assign_provenance` (one random draw per doc, in order) labeled a different 30% as external each time — with the same count (1475). Each run is internally consistent (one labeling per process), so within-run comparisons hold. But comparisons across runs or arms mix different labelings. Example: Contriever-dot β = 0 gives recall 0.745 in both run 2 and Phase 4d, but ext_recall 0.807 vs 0.69. Fixed: the loader now iterates `sorted(keep)`; `tests/test_loader.py` loads a fake BEIR set under three hash seeds and checks the labels are identical. New runs will not reproduce the old numbers exactly, because the labeling is now a fixed (different) draw.
 
-**Raw data lost.** The Colab runtime disconnected before the copy to Drive, so the three Phase 4d JSONs (poison texts, top-k lists, ISR answers) are gone. The console log is the only record (local only: `results/phase4d_colab_log_2026-10-15.txt`). Commit f445ca9 makes the Colab cell write straight to Drive (`RBENCH_RESULTS_DIR`) and skip a step whose JSON is already there. Any step that needs the top-k lists (Phase 4e) needs a Phase 4d re-run first. The re-run uses the fixed labeling, so its numbers will differ a little from the tables above.
+**Raw data lost (2026-10-15).** The Colab runtime disconnected before the copy to Drive, so the three Phase 4d JSONs (poison texts, top-k lists, ISR answers) were gone. The console log was the only record (local only: `results/phase4d_colab_log_2026-10-15.txt`). Commit f445ca9 makes the Colab cell write straight to Drive (`RBENCH_RESULTS_DIR`) and skip a step whose JSON is already there.
+
+#### E4 re-run (2026-10-21, T4) — fixed labeling, data on Drive + W&B
+
+Re-ran E1–E3 (both arms) and E4 (dot arm) with the fixed labeling (commit 8c58fc7). E1–E3 JSONs saved to Drive; E4 logged to W&B (`rbench-e4-isr` project, run `usn4qbuj`). Same recipe: 5000 docs, 300 queries (90 test), k = 5, CEM 12 × 40 × 96, cap = p99, Qwen2.5-3B-Instruct greedy 256 tokens.
+
+**E4(a) — ISR vs. number of poisons in a 5-doc context (90 queries, Wilson 95% CI).**
+
+| poisons | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| ISR | 0% [0, 4] | **100% [96, 100]** | 100% [96, 100] | **100% [96, 100]** | 100% [96, 100] | 99% [94, 100] |
+| strict | 0% | 89% | 84% | 92% | 92% | 99% |
+| cut off | 12% | 0% | 0% | 0% | 0% | 1% |
+
+**E4(b) — ISR on the real top 5 under echo ×3.**
+
+| cell | poisons in top 5 | ISR | strict | cut off |
+|---|---|---|---|---|
+| β=0, off | 3.00 | 100% [96, 100] | 100% | 0% |
+| β=0.5, off | 0.81 | **41%** [32, 51] | 37% | 12% |
+| β=0.75, off | 0.00 | 0% [0, 4] | 0% | 20% |
+| β=0, j=1 | 1.00 | **100%** [96, 100] | 97% | 0% |
+| β=0, j=2 | 2.00 | 99% [94, 100] | 99% | 0% |
+
+Numbers match the lost 2026-10-15 run within the CIs (ISR(1) 100% vs 99%, β=0.5 ISR 41% vs 42%). The fixed labeling moved the n=0 cut-off rate from 18% to 12% (shorter clean answers on this labeling). All earlier findings hold; the re-run replaces the lost data.
 
 **Next (from these results)**
-- [ ] **BO-j + LLM-stage isolation for the j untrusted slots.** BO-j makes "at most j of k docs are corrupt" true by construction. That is exactly the assumption of RobustRAG (isolate-then-aggregate) and PRA-RAG. With j < k/2, an aggregation step can out-vote one canary. Test (after a Phase 4d re-run, which regenerates the lost top-k lists): E4(b) with isolate-then-aggregate on the β = 0, j = 1 / j = 2 cells — target ISR ≈ 0 with ext_recall ≈ 0.6.
+- [ ] **BO-j + LLM-stage isolation for the j untrusted slots.** BO-j makes "at most j of k docs are corrupt" true by construction. That is exactly the assumption of RobustRAG (isolate-then-aggregate) and PRA-RAG. With j < k/2, an aggregation step can out-vote one canary. Test: E4(b) with isolate-then-aggregate on the β = 0, j = 1 / j = 2 cells — target ISR ≈ 0 with ext_recall ≈ 0.6.
 - [ ] **A second LLM** (7–8B instruct, H100) for E4(a), to check that "one poison is enough" is not a 3B effect.
 - [ ] **Labeling variance.** Now that the labeling is deterministic, re-run E1 over ~5 labeling seeds (add a labeling-only seed flag; `--seed` also sets the split and CEM) and report ext_recall as mean ± sd. Different labelings moved β = 0 ext_recall by ~0.1.
 
